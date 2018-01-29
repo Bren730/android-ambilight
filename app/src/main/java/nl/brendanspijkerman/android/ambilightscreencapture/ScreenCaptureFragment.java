@@ -11,8 +11,10 @@ import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
 import android.media.Image;
 import android.media.ImageReader;
+import android.media.MediaPlayer;
 import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
+import android.media.session.MediaSessionManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.support.annotation.IntegerRes;
@@ -92,7 +94,7 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
     // Capture segments, X segments, Y segment
     private int[] mCaptureGrid = {CAPTURE_GRID_X_SEGMENTS, CAPTURE_GRID_Y_SEGMENTS};
     // Grid X, Grid Y, rgb
-    private float[][][] mCaptureDataFloat;
+    private float[][][] mCaptureDataFloat = new float[CAPTURE_GRID_X_SEGMENTS][CAPTURE_GRID_Y_SEGMENTS][4];
 
     private int[] mVirtualDisplayResolution = {
             mCaptureGrid[0] * mCaptureGridElementResolution,
@@ -229,7 +231,6 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
         @Override
         public void onImageAvailable(ImageReader reader) {
             Image image = null;
-            FileOutputStream fos = null;
             Bitmap bitmap = null;
 
             try {
@@ -258,17 +259,17 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
 
                     int childCount = mGridLayout.getChildCount();
 
-                    for (int yCoord = 0; yCoord < CAPTURE_GRID_Y_SEGMENTS; yCoord++)
+                    for (int ySegment = 0; ySegment < CAPTURE_GRID_Y_SEGMENTS; ySegment++)
                     {
 
-                        for (int xCoord = 0; xCoord < CAPTURE_GRID_X_SEGMENTS; xCoord++)
+                        for (int xSegment = 0; xSegment < CAPTURE_GRID_X_SEGMENTS; xSegment++)
                         {
-                            int absolutePosition = yCoord * CAPTURE_GRID_X_SEGMENTS + xCoord;
+                            int absolutePosition = ySegment * CAPTURE_GRID_X_SEGMENTS + xSegment;
                             int width = bitmap.getWidth();
-                            int xCoordinate = xCoord * mCaptureGridElementResolution;
-                            int yCoordinate = yCoord * mCaptureGridElementResolution;
+                            int xCoordinate = xSegment * mCaptureGridElementResolution;
+                            int yCoordinate = ySegment * mCaptureGridElementResolution;
 
-                            int[] px = new int[mCaptureGridElementResolution * mCaptureGridElementResolution * 2];
+                            int[] px = new int[mCaptureGridElementResolution * mCaptureGridElementResolution];
                             bitmap.getPixels(
                                     px,
                                     0,
@@ -279,25 +280,38 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
                                     mCaptureGridElementResolution
                             );
 
+                            int pixelCounter = 0;
+
                             for (int k = 0; k < px.length; k++)
                             {
-                                A += (px[k] >> 24) & 0xff; // or color >>> 24
-                                R += (px[k] >> 16) & 0xff;
-                                G += (px[k] >>  8) & 0xff;
-                                B += (px[k]      ) & 0xff;
+                                A = (px[k] >> 24) & 0xff; // or color >>> 24
+
+                                if (A == 255)
+                                {
+                                    R += (px[k] >> 16) & 0xff;
+                                    G += (px[k] >>  8) & 0xff;
+                                    B += (px[k]      ) & 0xff;
+                                    pixelCounter++;
+                                }
+
                             }
 
-                            A = A / px.length;
-                            R = R / px.length;
-                            G = G / px.length;
-                            B = B / px.length;
+                            A = A / pixelCounter;
+                            R = R / pixelCounter;
+                            G = G / pixelCounter;
+                            B = B / pixelCounter;
 
                             View v = mGridLayout.getChildAt(absolutePosition);
                             v.setBackgroundColor(Color.argb(
-                                    Math.round(A),
+                                    255,
                                     Math.round(R),
                                     Math.round(G),
                                     Math.round(B)));
+
+                            mCaptureDataFloat[xSegment][ySegment][0] = A;
+                            mCaptureDataFloat[xSegment][ySegment][1] = R;
+                            mCaptureDataFloat[xSegment][ySegment][2] = G;
+                            mCaptureDataFloat[xSegment][ySegment][3] = B;
                         }
 
                     }
@@ -320,13 +334,6 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
             } catch (Exception e) {
                 e.printStackTrace();
             } finally {
-                if (fos != null) {
-                    try {
-                        fos.close();
-                    } catch (IOException ioe) {
-                        ioe.printStackTrace();
-                    }
-                }
 
                 if (bitmap != null) {
                     bitmap.recycle();
@@ -428,6 +435,9 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
 
         mScreenCaptureFpsTextView.setText("FPS: " + Integer.valueOf(fpsCounter));
         fpsCounter = 0;
+        MediaSessionManager mediaSessionManager = (MediaSessionManager) mContext.getSystemService(Context.MEDIA_SESSION_SERVICE);
+//        Log.i(TAG, "Playing media: " + mediaSessionManager.getActiveSessions().toString());
+
     }
 
 }

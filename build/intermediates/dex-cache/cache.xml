@@ -2,157 +2,22 @@
 <items version="2" >
 
     <item
-        is-multidex="false"
-        jar="/Users/brendan/.android/build-cache/993f77f278a2c0383ac2954219bdcd468cc64d0f/output/jars/classes.jar"
-        jumboMode="false"
-        optimize="true"
-        revision="25.0.3"
-        sha1="8df0e365e40beb151bc42dee20817721a6cab7b0">
-        <dex dex="/Users/brendan/Documents/Git/AmbilightScreenCapture/app/build/intermediates/pre-dexed/debug/classes_deb3ccda759e3010333214c9d1cdec3f4c32407a.jar" />
-    </item>
-    <item
-        is-multidex="false"
-        jar="/Users/brendan/.android/build-cache/6aa6bd22d9719524c340e37d864c74e77093db2d/output/jars/classes.jar"
-        jumboMode="false"
-        optimize="true"
-        revision="25.0.3"
-        sha1="47471eb19df288158b00b8d9cfa41bce7373f5cc">
-        <dex dex="/Users/brendan/Documents/Git/AmbilightScreenCapture/app/build/intermediates/pre-dexed/debug/classes_7edfbf0e1b088de0fd92a988b783682d226464d7.jar" />
-    </item>
-    <item
-        is-multidex="false"
-        jar="/Users/brendan/.android/build-cache/6240b5fd7c8773590d0210dc8e9f250831dbd404/output/jars/classes.jar"
-        jumboMode="false"
-        optimize="true"
-        revision="25.0.3"
-        sha1="d7c42c80f6509b9ea4db28ca7859ffae08ec5741">
-        <dex dex="/Users/brendan/Documents/Git/AmbilightScreenCapture/app/build/intermediates/pre-dexed/debug/classes_9f6b7a907e2467b506b98399bccc8de1b448bcc0.jar" />
-    </item>
-    <item
-        is-multidex="false"
-        jar="/Users/brendan/.android/build-cache/ca5c4c7fe954e24759215ede4a38379bbe20f766/output/jars/classes.jar"
-        jumboMode="false"
-        optimize="true"
-        revision="25.0.3"
-        sha1="9935891f23923f39d002087085d9696568a9f657">
-        <dex dex="/Users/brendan/Documents/Git/AmbilightScreenCapture/app/build/intermediates/pre-dexed/debug/classes_ddd4c4f90cc306ad0ded546bbbb2a5c19e3b09f0.jar" />
-    </item>
-    <item
-        is-multidex="false"
-        jar="/Users/brendan/.android/build-cache/749e262a34559538ff862af2f0730188cac0785d/output/jars/classes.jar"
-        jumboMode="false"
-        optimize="true"
-        revision="25.0.3"
-        sha1="c4f45092eee6cdf1a5dbd597b2b6819be652ce2e">
-        <dex dex="/Users/brendan/Documents/Git/AmbilightScreenCapture/app/build/intermediates/pre-dexed/debug/classes_25c25c03c45a8280dc1a5b50b86f4ba7d959dddd.jar" />
-    </item>
-    <item
-        is-multidex="false"
-        jar="/Users/brendan/Library/Android/sdk/extras/android/m2repository/com/android/support/support-annotations/26.0.0-alpha1/support-annotations-26.0.0-alpha1.jar"
-        jumboMode="false"
-        optimize="true"
-        revision="25.0.3"
-        sha1="023ee503b631f69511e335a061ea008f8da60f40">
-        <dex dex="/Users/brendan/Documents/Git/AmbilightScreenCapture/app/build/intermediates/pre-dexed/debug/support-annotations-26.0.0-alpha1_55974d3418ba10bf621259296f895c816b3a78a1.jar" />
-    </item>
-    <item
-        is-multidex="false"
-        jar="/Users/brendan/.gradle/caches/modules-2/files-2.1/com.github.bumptech.glide/glide/3.4.0/82552712133e094bbb565289fb2bc2d2952ba551/glide-3.4.0.jar"
-        jumboMode="false"
-        optimize="true"
-        revision="25.0.3"
-        sha1="82552712133e094bbb565289fb2bc2d2952ba551">
-        <dex dex="/Users/brendan/Documents/Git/AmbilightScreenCapture/app/build/intermediates/pre-dexed/debug/glide-3.4.0_0515cd208bd51b218780f279d04ab3b572312850.jar" />
-    </item>
-    <item
         is-multidex="true"
-        jar="/Users/brendan/Documents/Git/AmbilightScreenCapture/app/build/intermediates/incremental-classes/debug/instant-run-bootstrap.jar"
-        jumboMode="true"
-        optimize="true"
-        revision="25.0.3"
-        sha1="cfa9eb08a8e2ce1c53c6f384f260bf9d01ba4d41">
-        <dex dex="/Users/brendan/Documents/Git/AmbilightScreenCapture/app/build/intermediates/transforms/dex/debug/folders/1000/10000/instant-run-bootstrap_788814d9cd3ff3ac003c0e4a8023131ee0e50a7d/classes.dex" />
-    </item>
-    <item
-        is-multidex="true"
-        jar="/Users/brendan/.gradle/caches/modules-2/files-2.1/com.github.bumptech.glide/glide/3.4.0/82552712133e094bbb565289fb2bc2d2952ba551/glide-3.4.0.jar"
-        jumboMode="true"
-        optimize="true"
-        revision="25.0.3"
-        sha1="82552712133e094bbb565289fb2bc2d2952ba551">
-        <dex dex="/Users/brendan/Documents/Git/AmbilightScreenCapture/app/build/intermediates/transforms/dex/debug/folders/1000/10/glide-3.4.0_0515cd208bd51b218780f279d04ab3b572312850/classes.dex" />
-    </item>
-    <item
-        is-multidex="false"
-        jar="/Users/brendan/.android/build-cache/eb3f9f3490486d9ae5078e4ee4040144ff56c146/output/jars/classes.jar"
-        jumboMode="false"
-        optimize="true"
-        revision="25.0.3"
-        sha1="2e92aa0163544a804a0b34f169ca61801770839a">
-        <dex dex="/Users/brendan/Documents/Git/AmbilightScreenCapture/app/build/intermediates/pre-dexed/debug/classes_1db1926c408c28d135028bad8399817b1a0632bd.jar" />
-    </item>
-    <item
-        is-multidex="true"
-        jar="/Users/brendan/Documents/Git/AmbilightScreenCapture/app/build/intermediates/incremental-runtime-classes/debug/instant-run.jar"
+        jar="/Users/brendan/Documents/Git/android-ambilight/app/build/intermediates/incremental-runtime-classes/debug/instant-run.jar"
         jumboMode="true"
         optimize="true"
         revision="25.0.3"
         sha1="3be78ebc2706b2e1fe2f12d5726887a92d6c183b">
-        <dex dex="/Users/brendan/Documents/Git/AmbilightScreenCapture/app/build/intermediates/transforms/dex/debug/folders/1000/10000/instant-run_da72e423e1c3de8bfe3855f97eee41163c1eebcd/classes.dex" />
-    </item>
-    <item
-        is-multidex="false"
-        jar="/Users/brendan/.android/build-cache/3a041fe05492d24bf41f9a6ac8fb9ef524967e45/output/jars/classes.jar"
-        jumboMode="false"
-        optimize="true"
-        revision="25.0.3"
-        sha1="fcd01fd11233459f546c437ec927e9b61bf7caf1">
-        <dex dex="/Users/brendan/Documents/Git/AmbilightScreenCapture/app/build/intermediates/pre-dexed/debug/classes_516ef51ede67b10744525bcddb9879fc534e2bc8.jar" />
-    </item>
-    <item
-        is-multidex="false"
-        jar="/Users/brendan/.android/build-cache/447553f5569e43e00b90839e30cc532da54f3f78/output/jars/classes.jar"
-        jumboMode="false"
-        optimize="true"
-        revision="25.0.3"
-        sha1="952944218ecedea1554a513dec0c14d570642843">
-        <dex dex="/Users/brendan/Documents/Git/AmbilightScreenCapture/app/build/intermediates/pre-dexed/debug/classes_642cdc4b0bf0ab2a48ee25be937c89a54ebd81fa.jar" />
-    </item>
-    <item
-        is-multidex="false"
-        jar="/Users/brendan/.android/build-cache/da8e3431a33015002eaec1000d8e04f4f4e084a9/output/jars/classes.jar"
-        jumboMode="false"
-        optimize="true"
-        revision="25.0.3"
-        sha1="18d31838aa4fcc768a8a0516e22cc13b94655d89">
-        <dex dex="/Users/brendan/Documents/Git/AmbilightScreenCapture/app/build/intermediates/pre-dexed/debug/classes_3095c2baaea1863d4c07e231314eb4aff222e0ba.jar" />
-    </item>
-    <item
-        is-multidex="false"
-        jar="/Users/brendan/.android/build-cache/356e7b6c2b5c7a2102356af0883d279b71bb69f7/output/jars/classes.jar"
-        jumboMode="false"
-        optimize="true"
-        revision="25.0.3"
-        sha1="88246166d5afb106f532f6e6deae683c66b42c89">
-        <dex dex="/Users/brendan/Documents/Git/AmbilightScreenCapture/app/build/intermediates/pre-dexed/debug/classes_a852b50196308996ccdcf0fa8e887a98104e4229.jar" />
-    </item>
-    <item
-        is-multidex="false"
-        jar="/Users/brendan/.android/build-cache/b9f7390da930cfca20a54f4db528faf69a4dfe85/output/jars/classes.jar"
-        jumboMode="false"
-        optimize="true"
-        revision="25.0.3"
-        sha1="9d2bc5c4e48ccbe7c08a4676e327ac44824eb6cb">
-        <dex dex="/Users/brendan/Documents/Git/AmbilightScreenCapture/app/build/intermediates/pre-dexed/debug/classes_a5a2032aaad55cbb681e3e4140251fd8e1ea5588.jar" />
+        <dex dex="/Users/brendan/Documents/Git/android-ambilight/app/build/intermediates/transforms/dex/debug/folders/1000/10000/instant-run_42ba9fb4907bac008e5acfbe33584a7f5f5ab179/classes.dex" />
     </item>
     <item
         is-multidex="true"
-        jar="/Users/brendan/.android/build-cache/b9f7390da930cfca20a54f4db528faf69a4dfe85/output/jars/classes.jar"
+        jar="/Users/brendan/Documents/Git/android-ambilight/app/build/intermediates/incremental-classes/debug/instant-run-bootstrap.jar"
         jumboMode="true"
         optimize="true"
         revision="25.0.3"
-        sha1="9d2bc5c4e48ccbe7c08a4676e327ac44824eb6cb">
-        <dex dex="/Users/brendan/Documents/Git/AmbilightScreenCapture/app/build/intermediates/transforms/dex/debug/folders/1000/10/classes_a5a2032aaad55cbb681e3e4140251fd8e1ea5588/classes.dex" />
+        sha1="b10d167d09f75206662d1798680ad83f022c15ea">
+        <dex dex="/Users/brendan/Documents/Git/android-ambilight/app/build/intermediates/transforms/dex/debug/folders/1000/10000/instant-run-bootstrap_275cac3f70a9c64e6d320f2ba3c4a5ce4c66db5c/classes.dex" />
     </item>
 
 </items>
