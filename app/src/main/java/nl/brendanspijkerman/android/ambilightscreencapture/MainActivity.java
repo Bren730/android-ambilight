@@ -15,21 +15,23 @@
 package nl.brendanspijkerman.android.ambilightscreencapture;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.FragmentTransaction;
-import android.content.Context;
+import android.content.ComponentName;
+import android.content.DialogInterface;
 import android.content.Intent;
-import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
-import android.media.MediaCodec;
-import android.media.MediaFormat;
 import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
 import android.os.Bundle;
-import android.util.DisplayMetrics;
-import android.view.Display;
+import android.provider.Settings;
+import android.text.TextUtils;
+import android.util.Log;
 import android.view.Surface;
 import android.view.SurfaceView;
 import android.widget.Button;
+
+import static android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS;
 
 /*
  * MainActivity class that loads MainFragment
@@ -37,7 +39,10 @@ import android.widget.Button;
 public class MainActivity extends Activity
 {
 
-    private static final String TAG = "ScreenCaptureFragment";
+    private static final String TAG = MainActivity.class.getSimpleName();
+    private static final String ENABLED_NOTIFICATION_LISTENERS = "enabled_notification_listeners";
+
+    private AlertDialog enableNotificationListenerAlertDialog;
 
     private static final String STATE_RESULT_CODE = "result_code";
     private static final String STATE_RESULT_DATA = "result_data";
@@ -61,6 +66,17 @@ public class MainActivity extends Activity
     public void onCreate(Bundle savedInstanceState)
     {
         super.onCreate(savedInstanceState);
+
+        if(!isNotificationServiceEnabled()){
+            Log.e(TAG, "NotificationService not enabled");
+            enableNotificationListenerAlertDialog = buildNotificationServiceAlertDialog();
+            enableNotificationListenerAlertDialog.show();
+        }
+
+        startService(new Intent(this, ScreenCaptureService.class));
+
+        startService(new Intent(this, NotificationListenerExample.class));
+
         setContentView(R.layout.activity_main);
 
         FragmentTransaction transaction = getFragmentManager().beginTransaction();
@@ -75,6 +91,56 @@ public class MainActivity extends Activity
 //            transaction.commit();
 //        }
 
+    }
+
+    /**
+     * Is Notification Service Enabled.
+     * Verifies if the notification listener service is enabled.
+     * Got it from: https://github.com/kpbird/NotificationListenerService-Example/blob/master/NLSExample/src/main/java/com/kpbird/nlsexample/NLService.java
+     * @return True if eanbled, false otherwise.
+     */
+    private boolean isNotificationServiceEnabled(){
+        String pkgName = getPackageName();
+        final String flat = Settings.Secure.getString(getContentResolver(),
+                ENABLED_NOTIFICATION_LISTENERS);
+        if (!TextUtils.isEmpty(flat)) {
+            final String[] names = flat.split(":");
+            for (int i = 0; i < names.length; i++) {
+                final ComponentName cn = ComponentName.unflattenFromString(names[i]);
+                if (cn != null) {
+                    if (TextUtils.equals(pkgName, cn.getPackageName())) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Build Notification Listener Alert Dialog.
+     * Builds the alert dialog that pops up if the user has not turned
+     * the Notification Listener Service on yet.
+     * @return An alert dialog which leads to the notification enabling screen
+     */
+    private AlertDialog buildNotificationServiceAlertDialog(){
+        AlertDialog.Builder alertDialogBuilder = new AlertDialog.Builder(this);
+        alertDialogBuilder.setTitle("Notification listener service");
+        alertDialogBuilder.setMessage("Hi");
+        alertDialogBuilder.setPositiveButton("Yes",
+                new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int id) {
+                        startActivity(new Intent(ACTION_NOTIFICATION_LISTENER_SETTINGS));
+                    }
+                });
+        alertDialogBuilder.setNegativeButton("No",
+                new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int id) {
+                        // If you choose to not enable the notification listener
+                        // the app. will not work as expected
+                    }
+                });
+        return(alertDialogBuilder.create());
     }
 
 }

@@ -53,8 +53,9 @@
             android:text="Start"/>
 
         <View
-            android:layout_width="400px"
-            android:layout_height="400px"
+            android:id="@+id/animatedView"
+            android:layout_width="100px"
+            android:layout_height="600px"
             android:layout_marginLeft="1200px"
             android:background="@color/red"
             />

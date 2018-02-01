@@ -1,24 +1,36 @@
 package nl.brendanspijkerman.android.ambilightscreencapture;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.Fragment;
+import android.app.PendingIntent;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
+import android.hardware.usb.UsbDevice;
+import android.hardware.usb.UsbDeviceConnection;
+import android.hardware.usb.UsbManager;
 import android.media.Image;
 import android.media.ImageReader;
 import android.media.MediaPlayer;
 import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
+import android.media.session.MediaController;
 import android.media.session.MediaSessionManager;
 import android.os.Bundle;
 import android.os.Handler;
+import android.service.notification.NotificationListenerService;
 import android.support.annotation.IntegerRes;
+import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -26,6 +38,8 @@ import android.view.Surface;
 import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.Animation;
+import android.view.animation.AnimationUtils;
 import android.widget.Button;
 import android.widget.GridLayout;
 import android.widget.GridView;
@@ -34,9 +48,15 @@ import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.felhr.usbserial.UsbSerialDevice;
+import com.felhr.usbserial.UsbSerialInterface;
+
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import static android.graphics.Color.toArgb;
 
@@ -44,7 +64,7 @@ import static android.graphics.Color.toArgb;
  * Created by brendan on 26/01/2018.
  */
 
-public class ScreenCaptureFragment extends Fragment implements View.OnClickListener
+public class ScreenCaptureFragment extends Fragment implements View.OnClickListener, MediaSessionManager.OnActiveSessionsChangedListener
 {
 
     private static final String TAG = "ScreenCaptureFragment";
@@ -53,6 +73,7 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
     private static final String STATE_RESULT_DATA = "result_data";
 
     private static final int REQUEST_MEDIA_PROJECTION = 1;
+    private static final int REQUEST_MEDIA_CONTENT_CONTROL = 2;
     private static int IMAGES_PRODUCED;
     private int fpsCounter = 0;
 
@@ -71,6 +92,7 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
     private ImageReader mImageReader;
     private GridLayout mGridLayout;
     private TextView mScreenCaptureFpsTextView;
+    private View mAnimatedView;
 
     private final Handler mFpsHandler = new Handler();
 
@@ -105,6 +127,14 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
 
     private int mCaptureCounter = 0;
 
+    // USB Variables
+    private static final String ACTION_USB_PERMISSION = "nl.brendanspijkerman.android.ambilightscreencapture.USB_PERMISSION";
+
+    UsbManager usbManager;
+    UsbDevice device;
+    UsbDeviceConnection usbConnection;
+    UsbSerialDevice serial;
+
     @Override
     public void onAttach(Context context)
     {
@@ -121,6 +151,55 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
             mResultData = savedInstanceState.getParcelable(STATE_RESULT_DATA);
         }
 
+        usbManager = (UsbManager) getActivity().getSystemService(Context.USB_SERVICE);
+
+        findSerialPortDevice();
+
+    }
+
+    private void findSerialPortDevice() {
+        // This snippet will try to open the first encountered usb device connected, excluding usb root hubs
+        HashMap<String, UsbDevice> usbDevices = usbManager.getDeviceList();
+        if (!usbDevices.isEmpty()) {
+            boolean keep = true;
+            for (Map.Entry<String, UsbDevice> entry : usbDevices.entrySet()) {
+                device = entry.getValue();
+                int deviceVID = device.getVendorId();
+                int devicePID = device.getProductId();
+
+                Log.i(TAG, String.format("Vendor ID: %d",deviceVID));
+
+                if (deviceVID != 0x1d6b && (devicePID != 0x0001 && devicePID != 0x0002 && devicePID != 0x0003) && deviceVID != 0x5c6 && devicePID != 0x904c) {
+
+                    // There is a device connected to our Android device. Try to open it as a Serial Port.
+                    requestUserPermission();
+                    keep = false;
+                } else {
+//                    connection = null;
+                    device = null;
+                }
+
+                if (!keep)
+                    break;
+            }
+            if (!keep) {
+                // There is no USB devices connected (but usb host were listed). Send an intent to MainActivity.
+//                Intent intent = new Intent(ACTION_NO_USB);
+//                sendBroadcast(intent);
+            }
+        } else {
+            // There is no USB devices connected. Send an intent to MainActivity
+//            Intent intent = new Intent(ACTION_NO_USB);
+//            sendBroadcast(intent);
+        }
+    }
+
+    /*
+     * Request user permission. The response will be received in the BroadcastReceiver
+     */
+    private void requestUserPermission() {
+        PendingIntent mPendingIntent = PendingIntent.getBroadcast(getActivity().getApplicationContext(), 0, new Intent(ACTION_USB_PERMISSION), 0);
+        usbManager.requestPermission(device, mPendingIntent);
     }
 
     @Nullable
@@ -145,6 +224,11 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
         int gridCount = mCaptureGrid[0] * mCaptureGrid[1];
 
         mScreenCaptureFpsTextView = (TextView) view.findViewById(R.id.screenCaptureFps);
+        mAnimatedView = (View) view.findViewById(R.id.animatedView);
+
+        Animation rotation = AnimationUtils.loadAnimation(mContext, R.anim.rotate);
+        rotation.setFillAfter(true);
+        mAnimatedView.startAnimation(rotation);
 
         mFpsHandler.post(mUpdateFps);
 
@@ -316,19 +400,10 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
 
                     }
 
-                    Log.i(TAG, "AVG Color: "
-                            + Float.valueOf(A).toString() + ", "
-                    + Float.valueOf(R).toString() + ", "
-                    + Float.valueOf(G).toString() + ", "
-                    + Float.valueOf(B).toString());
-
-                    // write bitmap to a file
-//                    fos = new FileOutputStream(STORE_DIRECTORY + "/myscreen_" + IMAGES_PRODUCED + ".png");
-//                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, fos);
+//                    Log.i(TAG, String.format("AVG Color (ARGB): [%f, %f, %f, %f]", A, R, G, B));
 
                     IMAGES_PRODUCED++;
                     fpsCounter++;
-//                    Log.i(TAG, "captured image: " + IMAGES_PRODUCED);
                 }
 
             } catch (Exception e) {
@@ -343,6 +418,15 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
                     image.close();
                 }
             }
+        }
+    }
+
+    @Override
+    public void onActiveSessionsChanged(List<MediaController> mediaControllers) {
+        Log.i(TAG, "sessions changed");
+        if (mediaControllers != null && !mediaControllers.isEmpty()) {
+//            this.mediaController = mediaControllers.get(0);
+//            mediaController.registerCallback(this);
         }
     }
 
@@ -433,11 +517,27 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
     private void updateFps()
     {
 
-        mScreenCaptureFpsTextView.setText("FPS: " + Integer.valueOf(fpsCounter));
-        fpsCounter = 0;
-        MediaSessionManager mediaSessionManager = (MediaSessionManager) mContext.getSystemService(Context.MEDIA_SESSION_SERVICE);
-//        Log.i(TAG, "Playing media: " + mediaSessionManager.getActiveSessions().toString());
 
+
+        mScreenCaptureFpsTextView.setText(String.format("FPS: %d", fpsCounter));
+        fpsCounter = 0;
+
+//        ComponentName cn = new ComponentName(NotificationListenerExample, NotificationListenerExample.class);
+//        MediaSessionManager mediaSessionManager = (MediaSessionManager) mContext.getSystemService(Context.MEDIA_SESSION_SERVICE);
+//        mediaSessionManager.addOnActiveSessionsChangedListener(this, new ComponentName(mContext, NotificationListenerExample.class));
+//        int b = 0;
+//        Log.i(TAG, "Playing media: " + mediaSessionManager.getActiveSessions(null).toString());
+
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        switch (requestCode) {
+            case 200:
+
+                break;
+        }
     }
 
 }
