@@ -69,8 +69,8 @@ public class MainActivity extends Activity
 
         if(!isNotificationServiceEnabled()){
             Log.e(TAG, "NotificationService not enabled");
-            enableNotificationListenerAlertDialog = buildNotificationServiceAlertDialog();
-            enableNotificationListenerAlertDialog.show();
+//            enableNotificationListenerAlertDialog = buildNotificationServiceAlertDialog();
+//            enableNotificationListenerAlertDialog.show();
         }
 
         startService(new Intent(this, ScreenCaptureService.class));
@@ -126,11 +126,12 @@ public class MainActivity extends Activity
     private AlertDialog buildNotificationServiceAlertDialog(){
         AlertDialog.Builder alertDialogBuilder = new AlertDialog.Builder(this);
         alertDialogBuilder.setTitle("Notification listener service");
-        alertDialogBuilder.setMessage("Hi");
+        alertDialogBuilder.setMessage("Do you want to start the notification listener service?");
         alertDialogBuilder.setPositiveButton("Yes",
                 new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialog, int id) {
-                        startActivity(new Intent(ACTION_NOTIFICATION_LISTENER_SETTINGS));
+                        Intent intent=new Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS");
+                        startActivity(intent);
                     }
                 });
         alertDialogBuilder.setNegativeButton("No",

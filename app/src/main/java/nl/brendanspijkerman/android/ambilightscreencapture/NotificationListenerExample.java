@@ -56,11 +56,21 @@ public class NotificationListenerExample extends NotificationListenerService imp
                         getApplicationContext().getSystemService(Context.MEDIA_SESSION_SERVICE);
 
         ComponentName componentName = new ComponentName(this, this.getClass());
-        mediaSessionManager.addOnActiveSessionsChangedListener(this, componentName);
+        try
+        {
+            mediaSessionManager.addOnActiveSessionsChangedListener(this, componentName);
 
-        // Trigger change event with existing set of sessions.
-        List<MediaController> initialSessions = mediaSessionManager.getActiveSessions(componentName);
-        onActiveSessionsChanged(initialSessions);
+            // Trigger change event with existing set of sessions.
+            List<MediaController> initialSessions = mediaSessionManager.getActiveSessions(componentName);
+            onActiveSessionsChanged(initialSessions);
+        }
+        catch (Exception e)
+        {
+            Log.e(TAG, e.toString());
+        }
+
+
+
 
     }
 

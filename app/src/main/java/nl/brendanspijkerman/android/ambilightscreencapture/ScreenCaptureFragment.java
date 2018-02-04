@@ -53,6 +53,7 @@ import com.felhr.usbserial.UsbSerialInterface;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
@@ -66,6 +67,8 @@ import static android.graphics.Color.toArgb;
 
 public class ScreenCaptureFragment extends Fragment implements View.OnClickListener, MediaSessionManager.OnActiveSessionsChangedListener
 {
+
+    private static final boolean LOG_FPS = true;
 
     private static final String TAG = "ScreenCaptureFragment";
 
@@ -111,12 +114,13 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
     // Or simply 2^((mCaptureBitDepth - 8) / 2)
     private int mCaptureGridElementResolution = (int)Math.pow(2, ((mCaptureBitDepth - 8) / 2));
     private int mOutputBitDepth = 16;
-    private static int CAPTURE_GRID_X_SEGMENTS = 4;
-    private static int CAPTURE_GRID_Y_SEGMENTS = 2;
+    private static final int CAPTURE_GRID_X_SEGMENTS = 4;
+    private static final int CAPTURE_GRID_Y_SEGMENTS = 2;
     // Capture segments, X segments, Y segment
     private int[] mCaptureGrid = {CAPTURE_GRID_X_SEGMENTS, CAPTURE_GRID_Y_SEGMENTS};
     // Grid X, Grid Y, rgb
     private float[][][] mCaptureDataFloat = new float[CAPTURE_GRID_X_SEGMENTS][CAPTURE_GRID_Y_SEGMENTS][4];
+    private static final int SMOOTHING_FRAMES = 10;
 
     private int[] mVirtualDisplayResolution = {
             mCaptureGrid[0] * mCaptureGridElementResolution,
@@ -167,7 +171,31 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
                 int deviceVID = device.getVendorId();
                 int devicePID = device.getProductId();
 
-                Log.i(TAG, String.format("Vendor ID: %d",deviceVID));
+                Log.i(TAG, String.format("Vendor ID: %d, Product ID: %d", deviceVID, devicePID));
+
+                if (device.getManufacturerName().equals("Particle") && device.getProductName().equals("Photon"))
+                {
+                    Log.i(TAG, "Found Particle Photon device, trying to establish a connection");
+
+                    usbConnection = usbManager.openDevice(device);
+                    serial = UsbSerialDevice.createUsbSerialDevice(device, usbConnection);
+                    if (serial != null) {
+                        if (serial.open()) { //Set Serial Connection Parameters.
+//                            setUiEnabled(true); //Enable Buttons in UI
+                            serial.setBaudRate(115200);
+                            serial.setDataBits(UsbSerialInterface.DATA_BITS_8);
+                            serial.setStopBits(UsbSerialInterface.STOP_BITS_1);
+                            serial.setParity(UsbSerialInterface.PARITY_NONE);
+                            serial.setFlowControl(UsbSerialInterface.FLOW_CONTROL_OFF);
+                            serial.read(mCallback); //
+
+                        } else {
+                            Log.d("SERIAL", "PORT NOT OPEN");
+                        }
+                    } else {
+                        Log.d("SERIAL", "PORT IS NULL");
+                    }
+                }
 
                 if (deviceVID != 0x1d6b && (devicePID != 0x0001 && devicePID != 0x0002 && devicePID != 0x0003) && deviceVID != 0x5c6 && devicePID != 0x904c) {
 
@@ -392,13 +420,38 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
                                     Math.round(G),
                                     Math.round(B)));
 
-                            mCaptureDataFloat[xSegment][ySegment][0] = A;
-                            mCaptureDataFloat[xSegment][ySegment][1] = R;
-                            mCaptureDataFloat[xSegment][ySegment][2] = G;
-                            mCaptureDataFloat[xSegment][ySegment][3] = B;
+                            mCaptureDataFloat[xSegment][ySegment][0] = A * 256;
+                            mCaptureDataFloat[xSegment][ySegment][1] = R * 256;
+                            mCaptureDataFloat[xSegment][ySegment][2] = G * 256;
+                            mCaptureDataFloat[xSegment][ySegment][3] = B * 256;
                         }
 
                     }
+
+                    byte bytes[] = new byte[1 + (2 * 3 * 2)];
+                    bytes[0] = (byte)255;
+//                        bytes[1] = (byte)255;
+
+                    int pos = 1;
+
+                    for (int i = 0; i < 2; i++)
+                    {
+
+
+
+                        for (int j = 0; j < 3; j++)
+                        {
+                            int captureGridElementX = (i == 0) ? 0 : 3;
+                            byte high = (byte)Math.floor(mCaptureDataFloat[captureGridElementX][0][j + 1] / 256);
+                            byte low = (byte)(mCaptureDataFloat[captureGridElementX][0][j + 1] - (high * 256));
+
+                            bytes[pos] = high;
+                            bytes[pos + 1] = low;
+
+                            pos += 2;
+                        }
+                    }
+                    serial.write(bytes);
 
 //                    Log.i(TAG, String.format("AVG Color (ARGB): [%f, %f, %f, %f]", A, R, G, B));
 
@@ -516,11 +569,22 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
 
     private void updateFps()
     {
+        if (LOG_FPS)
+        {
 
+            Log.i(TAG, String.format("AVG Color (ARGB): [%f, %f, %f, %f]",
+                    mCaptureDataFloat[0][0][0],
+                    mCaptureDataFloat[0][0][1],
+                    mCaptureDataFloat[0][0][2],
+                    mCaptureDataFloat[0][0][3]));
+            Log.i(TAG, String.format("FPS: %d", fpsCounter));
 
+        }
 
         mScreenCaptureFpsTextView.setText(String.format("FPS: %d", fpsCounter));
+
         fpsCounter = 0;
+
 
 //        ComponentName cn = new ComponentName(NotificationListenerExample, NotificationListenerExample.class);
 //        MediaSessionManager mediaSessionManager = (MediaSessionManager) mContext.getSystemService(Context.MEDIA_SESSION_SERVICE);
@@ -529,6 +593,21 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
 //        Log.i(TAG, "Playing media: " + mediaSessionManager.getActiveSessions(null).toString());
 
     }
+
+    UsbSerialInterface.UsbReadCallback mCallback = new UsbSerialInterface.UsbReadCallback() {
+        //Defining a Callback which triggers whenever data is read.
+        @Override
+        public void onReceivedData(byte[] arg0) {
+            String data = null;
+            try {
+                data = new String(arg0, "UTF-8");
+                data.concat("/n");
+//                tvAppend(textView, data);
+            } catch (UnsupportedEncodingException e) {
+                e.printStackTrace();
+            }
+        }
+    };
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
