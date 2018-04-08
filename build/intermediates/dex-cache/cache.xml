@@ -11,12 +11,21 @@
         <dex dex="/Users/brendan/Documents/Git/android-ambilight/app/build/intermediates/transforms/dex/debug/folders/1000/10000/instant-run_42ba9fb4907bac008e5acfbe33584a7f5f5ab179/classes.dex" />
     </item>
     <item
+        is-multidex="false"
+        jar="/Users/brendan/.android/build-cache/4169b159a5f5a5449019563cf5b025ae442b8a5b/output/jars/classes.jar"
+        jumboMode="false"
+        optimize="true"
+        revision="25.0.3"
+        sha1="cf8f6618922da0b0d6d15d7a954c6b2b76f07bb6">
+        <dex dex="/Users/brendan/Documents/Git/android-ambilight/app/build/intermediates/pre-dexed/debug/classes_a1bbcf42ab3ffe82b80c689d5a1924a3352ee145.jar" />
+    </item>
+    <item
         is-multidex="true"
         jar="/Users/brendan/Documents/Git/android-ambilight/app/build/intermediates/incremental-classes/debug/instant-run-bootstrap.jar"
         jumboMode="true"
         optimize="true"
         revision="25.0.3"
-        sha1="b10d167d09f75206662d1798680ad83f022c15ea">
+        sha1="b70a11ec354605f1f0ea50b3ccd4f767bd193853">
         <dex dex="/Users/brendan/Documents/Git/android-ambilight/app/build/intermediates/transforms/dex/debug/folders/1000/10000/instant-run-bootstrap_275cac3f70a9c64e6d320f2ba3c4a5ce4c66db5c/classes.dex" />
     </item>
 
