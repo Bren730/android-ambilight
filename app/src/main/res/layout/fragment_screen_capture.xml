@@ -39,9 +39,9 @@
             android:id="@+id/screenCaptureGridLayout"
             android:layout_width="200px"
             android:layout_height="100px"
-            android:columnCount="4"
+            android:columnCount="16"
             android:orientation="horizontal"
-            android:rowCount="2">
+            android:rowCount="9">
 
         </GridLayout>
 

@@ -64,7 +64,8 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
     private static final int REQUEST_MEDIA_PROJECTION = 1;
     private static final int REQUEST_MEDIA_CONTENT_CONTROL = 2;
     private static int IMAGES_PRODUCED;
-    private int fpsCounter = 0;
+    private int screenFpsCounter = 0;
+    private int outputFpsCounter = 0;
 
     private int mScreenDensity;
     private Handler mHandler;
@@ -86,6 +87,7 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
     private final Handler mFpsHandler = new Handler();
 
     private final Runnable mUpdateFps = new Runnable() {
+
         public void run() {
             updateFps();
             mFpsHandler.postDelayed(mUpdateFps, 1000); // 1 second
@@ -94,16 +96,24 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
 
     private final Handler mSerialOutputHandler = new Handler();
 
-    private final Runnable mOutputSeial = new Runnable() {
+    class SerialRunnable implements Runnable {
+
+        UsbSerialDevice ser;
+
+        SerialRunnable(UsbSerialDevice ser)
+        {
+            this.ser = ser;
+        }
+
         public void run() {
-            outputSerial();
-            mSerialOutputHandler.postDelayed(mOutputSeial, CAPTURE_MS); // 1 second
+            outputSerial(this.ser);
+            mSerialOutputHandler.postDelayed(this, CAPTURE_MS); // 1 second
         }
     };
 
     // Output bit depth
     private int mOutputBitDepth = 16;
-    private static final int OUTPUT_FPS = 60;
+    private static final int OUTPUT_FPS = 100;
     private static final int CAPTURE_MS = (int)Math.floor((1.0 / (float)OUTPUT_FPS) * 1000);
     // We want to capture a total of 2^(mOutputBitDepth - 8) samples (the pixel data is already 8 Bits)
     // To get that number in an X x Y pixel grid, we need the square root of 2^(mOutputBitDepth - 8)
@@ -263,17 +273,28 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
         mAnimatedView.startAnimation(rotation);
 
         mFpsHandler.post(mUpdateFps);
-        mSerialOutputHandler.post(mOutputSeial);
+        SerialRunnable runnable = new SerialRunnable(serial);
+        mSerialOutputHandler.post(runnable);
 
         for (int i = 0; i < gridCount; i ++)
         {
             View gridElement = new View(mContext);
+
+            if (i % 3 == 0)
+            {
+                gridElement.setBackgroundColor(getResources().getColor(R.color.lb_action_text_color));
+            }
+            else
+            {
+                gridElement.setBackgroundColor(getResources().getColor(R.color.lb_basic_card_info_bg_color));
+            }
+
             LinearLayout.LayoutParams gridParams = new LinearLayout.LayoutParams(
                     200 / CAPTURE_GRID_X_SEGMENTS,
                     100 / CAPTURE_GRID_Y_SEGMENTS
             );
             gridElement.setLayoutParams(gridParams);
-            gridElement.setBackgroundColor(Color.BLUE);
+//            gridElement.setBackgroundColor(Color.BLUE);
 
             mGridLayout.addView(gridElement);
         }
@@ -429,6 +450,8 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
                             mCaptureDataFloat[xSegment][ySegment][1] = R * 256;
                             mCaptureDataFloat[xSegment][ySegment][2] = G * 256;
                             mCaptureDataFloat[xSegment][ySegment][3] = B * 256;
+
+                            putNewTemporalFrame();
                         }
 
                     }
@@ -436,7 +459,7 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
 //                    Log.i(TAG, String.format("AVG Color (ARGB): [%f, %f, %f, %f]", A, R, G, B));
 
                     IMAGES_PRODUCED++;
-                    fpsCounter++;
+                    screenFpsCounter++;
                 }
 
             } catch (Exception e) {
@@ -449,6 +472,42 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
 
                 if (image != null) {
                     image.close();
+                }
+            }
+        }
+    }
+
+    private void putNewTemporalFrame()
+    {
+
+        for (int i = SMOOTHING_FRAMES - 1; i > 0; i--)
+        {
+//            Log.i(TAG, String.format("Assigning %d the value of %d, %f %f", i, i - 1, mCaptureDataTemporal[i][15][3][1], mCaptureDataTemporal[i - 1][15][3][1]));
+            for (int j = 0; j < CAPTURE_GRID_X_SEGMENTS; j++)
+            {
+
+                for (int k = 0; k < CAPTURE_GRID_Y_SEGMENTS; k++)
+                {
+
+                    for (int l = 0; l < PIXEL_SUBCHANNELS; l++)
+                    {
+                        mCaptureDataTemporal[i][j][k][l] = mCaptureDataTemporal[i - 1][j][k][l];
+
+                    }
+                }
+            }
+        }
+
+        for (int j = 0; j < CAPTURE_GRID_X_SEGMENTS; j++)
+        {
+
+            for (int k = 0; k < CAPTURE_GRID_Y_SEGMENTS; k++)
+            {
+
+                for (int l = 0; l < PIXEL_SUBCHANNELS; l++)
+                {
+                    mCaptureDataTemporal[0][j][k][l] = mCaptureDataFloat[j][k][l];
+
                 }
             }
         }
@@ -542,18 +601,32 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
         if (LOG_FPS)
         {
 
-            Log.i(TAG, String.format("AVG Color (ARGB): [%f, %f, %f, %f]",
-                    mCaptureDataFloat[3][0][0],
-                    mCaptureDataFloat[3][0][1],
-                    mCaptureDataFloat[3][0][2],
-                    mCaptureDataFloat[3][0][3]));
-            Log.i(TAG, String.format("FPS: %d", fpsCounter));
+//            Log.i(TAG, String.format("AVG Color (ARGB): [%f, %f, %f, %f]",
+//                    mCaptureDataFloat[0][0][0],
+//                    mCaptureDataFloat[0][0][1],
+//                    mCaptureDataFloat[0][0][2],
+//                    mCaptureDataFloat[0][0][3]));
+
+            Log.i(TAG, String.format("Temporal Color (r): [%f, %f, %f, %f, %f, %f, %f, %f, %f, %f]",
+                    mCaptureDataTemporal[0][0][0][1],
+                    mCaptureDataTemporal[1][0][0][1],
+                    mCaptureDataTemporal[2][0][0][1],
+                    mCaptureDataTemporal[3][0][0][1],
+                    mCaptureDataTemporal[4][0][0][1],
+                    mCaptureDataTemporal[5][0][0][1],
+                    mCaptureDataTemporal[6][0][0][1],
+                    mCaptureDataTemporal[7][0][0][1],
+                    mCaptureDataTemporal[8][0][0][1],
+                    mCaptureDataTemporal[9][0][0][1]));
+
+            Log.i(TAG, String.format("FPS, output: %d, %d", screenFpsCounter, outputFpsCounter));
 
         }
 
-        mScreenCaptureFpsTextView.setText(String.format("FPS: %d", fpsCounter));
+        mScreenCaptureFpsTextView.setText(String.format("FPS, output: %d, %d", screenFpsCounter, outputFpsCounter));
 
-        fpsCounter = 0;
+        screenFpsCounter = 0;
+        outputFpsCounter = 0;
 
 
 //        ComponentName cn = new ComponentName(NotificationListenerExample, NotificationListenerExample.class);
@@ -604,9 +677,22 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
         return averageColors;
     }
 
-    private void outputSerial()
+    private void outputSerial(UsbSerialDevice ser)
     {
         int avg[][][] = getAverageColors();
+        int simplifiedAvg[][][] = new int[2][1][4];
+
+        for (int i = 0; i < CAPTURE_GRID_X_SEGMENTS; i++)
+        {
+            for (int j = 0; j < CAPTURE_GRID_Y_SEGMENTS; j++)
+            {
+                for (int k = 0; k < PIXEL_SUBCHANNELS; k++)
+                {
+                    int x = (i < 7) ? 0 : 1;
+                    simplifiedAvg[x][0][k] += (avg[i][j][k] / 72.0);
+                }
+            }
+        }
 
         try
         {
@@ -618,13 +704,11 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
             for (int i = 0; i < 2; i++)
             {
 
-
-
                 for (int j = 0; j < 3; j++)
                 {
-                    int captureGridElementX = (i == 0) ? 0 : 3;
-                    int high = (int)Math.floor(avg[captureGridElementX][0][j + 1] / 256);
-                    int low = (int)(avg[captureGridElementX][0][j + 1] - (high * 256));
+                    int captureGridElementX = i;
+                    int high = (int)Math.floor(simplifiedAvg[captureGridElementX][0][j + 1] / 256);
+                    int low = (int)(simplifiedAvg[captureGridElementX][0][j + 1] - (high * 256));
 
                     high = (high > 254) ? (byte)254 : high;
                     low = (low > 254) ? (byte)254 : low;
@@ -635,10 +719,9 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
                     pos += 2;
                 }
             }
-            if (serial != null)
-            {
-                serial.write(bytes);
-            }
+
+            ser.write(bytes);
+            outputFpsCounter++;
 
         }
         catch (Exception e)
