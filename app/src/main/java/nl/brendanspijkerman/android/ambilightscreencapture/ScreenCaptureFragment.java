@@ -43,9 +43,12 @@ import com.felhr.usbserial.UsbSerialInterface;
 
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import nl.brendanspijkerman.android.ambilightscreencapture.model.GridElement;
 
 /**
  * Created by brendan on 26/01/2018.
@@ -407,6 +410,11 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
                             int xCoordinate = xSegment * mCaptureGridElementResolution;
                             int yCoordinate = ySegment * mCaptureGridElementResolution;
 
+                            GridElement gridElement = new GridElement(
+                                    mCaptureGridElementResolution,
+                                    mCaptureGridElementResolution,
+                                    PIXEL_SUBCHANNELS);
+
                             int[] px = new int[mCaptureGridElementResolution * mCaptureGridElementResolution];
                             bitmap.getPixels(
                                     px,
@@ -417,6 +425,10 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
                                     mCaptureGridElementResolution,
                                     mCaptureGridElementResolution
                             );
+
+                            gridElement.setPixels(px);
+                            float[] color = new float[4];
+                            color = gridElement.getAverageColor();
 
                             int pixelCounter = 0;
 
@@ -431,7 +443,6 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
                                     B += (px[k]      ) & 0xff;
                                     pixelCounter++;
                                 }
-
                             }
 
                             A = A / pixelCounter;
@@ -619,11 +630,16 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
                     mCaptureDataTemporal[8][0][0][1],
                     mCaptureDataTemporal[9][0][0][1]));
 
-            Log.i(TAG, String.format("FPS, output: %d, %d", screenFpsCounter, outputFpsCounter));
+            String fps = String.format("FPS: %d", screenFpsCounter);
+            String outputFps = String.format("Serial fps: %d", outputFpsCounter);
+
+            Log.i(TAG, fps);
+            Log.i(TAG, outputFps);
 
         }
 
-        mScreenCaptureFpsTextView.setText(String.format("FPS, output: %d, %d", screenFpsCounter, outputFpsCounter));
+        String msg = String.format("FPS, output: %d, %d", screenFpsCounter, outputFpsCounter);
+        mScreenCaptureFpsTextView.setText(msg);
 
         screenFpsCounter = 0;
         outputFpsCounter = 0;
@@ -720,8 +736,11 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
                 }
             }
 
-            ser.write(bytes);
-            outputFpsCounter++;
+            if (ser != null)
+            {
+                ser.write(bytes);
+                outputFpsCounter++;
+            }
 
         }
         catch (Exception e)
