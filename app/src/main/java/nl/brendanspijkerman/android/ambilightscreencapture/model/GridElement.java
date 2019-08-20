@@ -1,27 +1,40 @@
 package nl.brendanspijkerman.android.ambilightscreencapture.model;
 
 import android.graphics.Color;
+import android.util.Log;
+
+import java.util.Arrays;
 
 public class GridElement {
 
+    private static final String TAG = "GridElement";
+    private static final int SUBPIXELS = 4;
+
+    // DIMENSIONS
     private int width;
     private int height;
-    private int subpixelCount = 4;
-    private int[][][] pixels;
+    private int[] pixels;
     private int pixelCount;
 
-    private float alpha;
-    private float red;
-    private float green;
-    private float blue;
+    // TEMPORAL PARAMETERS
+    private int temporalFrameCount;
+    // The newest frame will be put in index 0 and will have the highest weight during average calculations
+    // So: temporalFrames[0] is the newest frame and will weigh the most
+    private double[][] temporalFrames;
+    private double temporalWeightExponent = 1;
 
-    private boolean useAlpha = true;
+    // COLORS
+    private double averageColor[];
+    private double temporalAverageColor[];
 
-    public GridElement(int width, int height)
+    public GridElement(int width, int height, int temporalFrameCount, double temporalWeightExponent)
     {
         this.width = width;
         this.height = height;
-        this.pixels = new int[width][height][subpixelCount];
+        this.temporalFrameCount = temporalFrameCount;
+        this.temporalWeightExponent = temporalWeightExponent;
+        this.temporalFrames = new double[temporalFrameCount][SUBPIXELS];
+        this.pixels = new int[width * height];
         this.pixelCount = width * height;
     }
 
@@ -36,7 +49,7 @@ public class GridElement {
         if (width > 0)
         {
             this.width = width;
-            this.pixels = new int[width][height][subpixelCount];
+            this.pixels = new int[width * height];
         }
         else
         {
@@ -56,7 +69,7 @@ public class GridElement {
         if (height > 0)
         {
             this.height = height;
-            this.pixels = new int[width][height][subpixelCount];
+            this.pixels = new int[width * height];
         }
         else
         {
@@ -65,55 +78,23 @@ public class GridElement {
 
     }
 
-    public int[][][] getPixels()
+    public int[] getPixels()
     {
         return pixels;
     }
 
-    public void setPixelsRGB(int[][][] pixels)
+    public void setPixels(int[] pixels)
     {
         if (pixels.length == (this.width * this.height))
         {
             this.pixels = pixels;
+            setAverageColor(calculateAverageColor());
+            putTemporalFrame();
+            setTemporalAverageColor(calculateTemporalAverageColor());
         }
         else
         {
             throw new IndexOutOfBoundsException(String.format("Pixel count (%d) does not equal width * height (%d x %d)", pixels.length, this.width, this.height));
-        }
-    }
-
-    public void setPixelsFromColor(int[] pixels)
-    {
-        if (pixels.length == getPixelCount())
-        {
-            for (int x = 0; x < width; x++)
-            {
-                for (int y = 0; y < width; y++)
-                {
-
-                    int pos = (x * y) + x;
-                    int pixelCounter = 0;
-
-                    int A = 0;
-                    int R = 0;
-                    int G = 0;
-                    int B = 0;
-
-                    A = (pixels[pos] >> 24) & 0xff; // or color >>> 24
-                    R = (pixels[pos] >> 16) & 0xff;
-                    G = (pixels[pos] >>  8) & 0xff;
-                    B = (pixels[pos]      ) & 0xff;
-
-                    this.pixels[x][y][0] = A;
-                    this.pixels[x][y][1] = R;
-                    this.pixels[x][y][2] = G;
-                    this.pixels[x][y][3] = B;
-                }
-            }
-        }
-        else
-        {
-            throw new IndexOutOfBoundsException(String.format("Pixel count does not equal "));
         }
     }
 
@@ -122,26 +103,103 @@ public class GridElement {
         return (width * height);
     }
 
-    public float[] getAverageColor()
+    public void setAverageColor(double[] color)
     {
-        float[] color = new float[subpixelCount];
-        for (int x = 0; x < width; x ++)
+        this.averageColor = color;
+    }
+
+    public void setTemporalAverageColor(double[] color)
+    {
+        this.temporalAverageColor = color;
+    }
+
+    public double[] getAverageColor()
+    {
+        return this.averageColor;
+    }
+
+    public double[] calculateAverageColor()
+    {
+        double[] color = new double[SUBPIXELS];
+
+        int A = 0;
+        int R = 0;
+        int G = 0;
+        int B = 0;
+
+        for (int i = 0; i < this.pixels.length; i++)
         {
-            for (int y = 0; y < height; y++)
-            {
-                for (int subpixel = 0; subpixel < subpixelCount; subpixel++)
-                {
-                    color[subpixel] += this.pixels[x][y];
-                }
-            }
+            A += (this.pixels[i] >> 24) & 0xff;
+            R += (this.pixels[i] >> 16) & 0xff;
+            G += (this.pixels[i] >>  8) & 0xff;
+            B += (this.pixels[i]      ) & 0xff;
         }
 
-        for (int subpixel = 0; subpixel < subpixelCount; subpixel++)
+        int colors[] = {A, R, G, B};
+
+//        Log.i(TAG, Arrays.toString(colors));
+
+        int pixelCount = getPixelCount();
+
+        color[0] = A;
+        color[1] = R;
+        color[2] = G;
+        color[3] = B;
+
+        return color;
+    }
+
+    private void putTemporalFrame()
+    {
+        this.temporalFrames = shiftArrayRight(this.temporalFrames, 1);
+        double[] averageColor = this.getAverageColor();
+        this.temporalFrames[0] = Arrays.copyOf(averageColor, averageColor.length);
+    }
+
+    public double[] getTemporalAverageColor()
+    {
+        return this.temporalAverageColor;
+    }
+
+    public double[] calculateTemporalAverageColor()
+    {
+        double[] color = new double[SUBPIXELS];
+        double frameWeight = 1; // TODO adjust to temporalWeightExponent
+        double sumFrameWeights = 0;
+
+        // (x+1)^-a
+
+        for (int i = 0; i < this.temporalFrameCount; i++)
         {
-            color[subpixel] = color[subpixel] / getPixelCount();
+            double normalized = (double)i / (double)this.temporalFrameCount;
+            frameWeight = Math.pow(normalized + 1, -this.temporalWeightExponent);
+
+            for (int j = 0; j < SUBPIXELS; j++)
+            {
+                color[j] += (this.temporalFrames[i][j] * frameWeight);
+            }
+
+            sumFrameWeights += frameWeight;
+        }
+
+        for (int i = 0; i < SUBPIXELS; i++)
+        {
+            color[i] = color[i] / sumFrameWeights;
         }
 
         return color;
+    }
+
+    private double[][] shiftArrayRight(double[][] array, int shift)
+    {
+        double[][] shifted = new double[array.length][array[0].length];
+
+        for (int i = 0; i < array.length - shift; i++)
+        {
+            shifted[i + shift] = array[i];
+        }
+
+        return shifted;
     }
 
 }

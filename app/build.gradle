@@ -5,7 +5,7 @@ android {
     buildToolsVersion '27.0.3'
     defaultConfig {
         applicationId "nl.brendanspijkerman.android.ambilightscreencapture"
-        minSdkVersion 22
+        minSdkVersion 26
         targetSdkVersion 26
         versionCode 1
         versionName "1.0"

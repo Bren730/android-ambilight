@@ -43,7 +43,7 @@ import com.felhr.usbserial.UsbSerialInterface;
 
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +58,26 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
 {
 
     private static final boolean LOG_FPS = true;
+
+    // variable positions
+    private static final byte CMD_FUNCTION = (byte)6;
+    private static final byte CMD_FUNCTION_LENGTH = (byte)1;
+    private static final byte CMD_DATA_LENGTH = (byte)4;
+    private static final byte CMD_DATA_LENGTH_LENGTH = (byte)2;
+    private static final byte CMD_DATA = (byte)7;
+
+// Header values
+    private static final byte HEADER_LENGTH = (byte)4;
+    private static final byte HEADER_0 = (byte)0x54;
+    private static final byte HEADER_1 = (byte)0xB5;
+    private static final byte HEADER_2 = (byte)0xFF;
+    private static final byte HEADER_3 = (byte)0xFE;
+
+// Function values
+    private static final byte FUNCTION_START = (byte)0x00;
+    private static final byte FUNCTION_DATA = (byte)0x01;
+    private static final byte FUNCTION_PAUSE = (byte)0x02;
+    private static final byte FUNCTION_STOP = (byte)0x03;
 
     private static final String TAG = "ScreenCaptureFragment";
 
@@ -110,34 +130,35 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
 
         public void run() {
             outputSerial(this.ser);
-            mSerialOutputHandler.postDelayed(this, CAPTURE_MS); // 1 second
+            mSerialOutputHandler.postDelayed(this, OUTPUT_MS);
         }
     };
 
     // Output bit depth
     private int mOutputBitDepth = 16;
     private static final int OUTPUT_FPS = 100;
-    private static final int CAPTURE_MS = (int)Math.floor((1.0 / (float)OUTPUT_FPS) * 1000);
-    // We want to capture a total of 2^(mOutputBitDepth - 8) samples (the pixel data is already 8 Bits)
-    // To get that number in an X x Y pixel grid, we need the square root of 2^(mOutputBitDepth - 8)
+    private static final int OUTPUT_MS = (int)Math.floor((1.0 / (float)OUTPUT_FPS) * 1000);
+
+    // To get N-bit depth data, we need to sample multiple pixels. Since every pixel is already 8 bits,
+    // We need 2^(N - 8) pixels to sample. We want these pixels to be sampled from a square portion of the video frame
+    // To get the x-y dimensions of our sample segment, we need the square root of 2^(mOutputBitDepth - 8)
     // This is the equivalent of (2^(mOutputBitDepth - 8))^1/2
     // Or simply 2^((mOutputBitDepth - 8) / 2)
     private int mCaptureGridElementResolution = (int)Math.pow(2, ((mOutputBitDepth - 8) / 2));
     private static final int CAPTURE_GRID_X_SEGMENTS = 16;
     private static final int CAPTURE_GRID_Y_SEGMENTS = 9;
+    private static final int CAPTURE_GRID_COUNT = CAPTURE_GRID_X_SEGMENTS * CAPTURE_GRID_Y_SEGMENTS;
     private static final int SMOOTHING_FRAMES = 10;
     private static final int PIXEL_SUBCHANNELS = 4;
-    // Capture segments, X segments, Y segment
-    private int[] mCaptureGrid = {CAPTURE_GRID_X_SEGMENTS, CAPTURE_GRID_Y_SEGMENTS};
     // Grid X, Grid Y, rgb
-    private float[][][] mCaptureDataFloat = new float[CAPTURE_GRID_X_SEGMENTS][CAPTURE_GRID_Y_SEGMENTS][PIXEL_SUBCHANNELS];
-    private float[][][][] mCaptureDataTemporal = new float[SMOOTHING_FRAMES][CAPTURE_GRID_X_SEGMENTS][CAPTURE_GRID_Y_SEGMENTS][PIXEL_SUBCHANNELS];
-
+    private double[][][] mCaptureDataDouble = new double[CAPTURE_GRID_X_SEGMENTS][CAPTURE_GRID_Y_SEGMENTS][PIXEL_SUBCHANNELS];
 
     private int[] mVirtualDisplayResolution = {
-            mCaptureGrid[0] * mCaptureGridElementResolution,
-            mCaptureGrid[1] * mCaptureGridElementResolution
+            CAPTURE_GRID_X_SEGMENTS * mCaptureGridElementResolution,
+            CAPTURE_GRID_Y_SEGMENTS * mCaptureGridElementResolution
     };
+
+    private GridElement mCaptureGrid[][] = new GridElement[CAPTURE_GRID_X_SEGMENTS][CAPTURE_GRID_Y_SEGMENTS];
 
     private Context mContext;
 
@@ -167,14 +188,29 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
             mResultCode = savedInstanceState.getInt(STATE_RESULT_CODE);
             mResultData = savedInstanceState.getParcelable(STATE_RESULT_DATA);
         }
-
+        initCaptureGrid();
         usbManager = (UsbManager) getActivity().getSystemService(Context.USB_SERVICE);
         findSerialPortDevice();
 
     }
 
+    private void initCaptureGrid()
+    {
+        for (int i = 0; i < CAPTURE_GRID_X_SEGMENTS; i++)
+        {
+            for (int j = 0; j < CAPTURE_GRID_Y_SEGMENTS; j++)
+            {
+                this.mCaptureGrid[i][j] = new GridElement(
+                        mCaptureGridElementResolution,
+                        mCaptureGridElementResolution,
+                        SMOOTHING_FRAMES,
+                        5);
+            }
+        }
+    }
+
     private void findSerialPortDevice() {
-        // This snippet will try to open the first encountered usb device connected, excluding usb root hubs
+
         HashMap<String, UsbDevice> usbDevices = usbManager.getDeviceList();
         if (!usbDevices.isEmpty()) {
             boolean keep = true;
@@ -185,9 +221,9 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
 
                 Log.i(TAG, String.format("Vendor ID: %d, Product ID: %d", deviceVID, devicePID));
 
-                if (device.getManufacturerName().equals("Particle") && device.getProductName().equals("Photon"))
+                if (device.getManufacturerName().equals("Particle"))
                 {
-                    Log.i(TAG, "Found Particle Photon device, trying to establish a connection");
+                    Log.i(TAG, "Found Particle device, trying to establish a connection");
                     requestUserPermission();
 
                     // TODO: properly implement USB permissions and callbacks
@@ -266,12 +302,12 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
         mButtonToggle.setOnClickListener(this);
 
         mGridLayout = (GridLayout) view.findViewById(R.id.screenCaptureGridLayout);
-        int gridCount = mCaptureGrid[0] * mCaptureGrid[1];
+        int gridCount = CAPTURE_GRID_X_SEGMENTS * CAPTURE_GRID_Y_SEGMENTS;
 
         mScreenCaptureFpsTextView = (TextView) view.findViewById(R.id.screenCaptureFps);
         mAnimatedView = (View) view.findViewById(R.id.animatedView);
 
-        Animation rotation = AnimationUtils.loadAnimation(mContext, R.anim.rotate);
+        Animation rotation = AnimationUtils.loadAnimation(mContext, R.anim.translate_and_rotate);
         rotation.setFillAfter(true);
         mAnimatedView.startAnimation(rotation);
 
@@ -393,11 +429,6 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
 //                    Log.i(TAG, "SurfaceView width: " + Integer.valueOf(mSurfaceView.getWidth()).toString());
 //                    Log.i(TAG, "SurfaceView height: " + Integer.valueOf(mSurfaceView.getHeight()).toString());
 
-                    float A = 0;
-                    float R = 0;
-                    float G = 0;
-                    float B = 0;
-
                     int childCount = mGridLayout.getChildCount();
 
                     for (int ySegment = 0; ySegment < CAPTURE_GRID_Y_SEGMENTS; ySegment++)
@@ -410,11 +441,6 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
                             int xCoordinate = xSegment * mCaptureGridElementResolution;
                             int yCoordinate = ySegment * mCaptureGridElementResolution;
 
-                            GridElement gridElement = new GridElement(
-                                    mCaptureGridElementResolution,
-                                    mCaptureGridElementResolution,
-                                    PIXEL_SUBCHANNELS);
-
                             int[] px = new int[mCaptureGridElementResolution * mCaptureGridElementResolution];
                             bitmap.getPixels(
                                     px,
@@ -426,43 +452,35 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
                                     mCaptureGridElementResolution
                             );
 
-                            gridElement.setPixels(px);
-                            float[] color = new float[4];
-                            color = gridElement.getAverageColor();
+                            mCaptureGrid[xSegment][ySegment].setPixels(px);
+                            double[] color;
+                            color = mCaptureGrid[xSegment][ySegment].getTemporalAverageColor();
 
-                            int pixelCounter = 0;
+                            Log.i(TAG, "Pre-division");
+                            Log.i(TAG, Arrays.toString(color) );
 
-                            for (int k = 0; k < px.length; k++)
-                            {
-                                A = (px[k] >> 24) & 0xff; // or color >>> 24
+                            int R, G, B;
 
-                                if (A == 255)
-                                {
-                                    R += (px[k] >> 16) & 0xff;
-                                    G += (px[k] >>  8) & 0xff;
-                                    B += (px[k]      ) & 0xff;
-                                    pixelCounter++;
-                                }
-                            }
+                            R = (int)Math.round(color[1] / 256);
+                            G = (int)Math.round(color[2] / 256);
+                            B = (int)Math.round(color[3] / 256);
 
-                            A = A / pixelCounter;
-                            R = R / pixelCounter;
-                            G = G / pixelCounter;
-                            B = B / pixelCounter;
+
+
+                            Log.i(TAG, "Post-division");
+                            Log.i(TAG, Arrays.toString(color) );
 
                             View v = mGridLayout.getChildAt(absolutePosition);
                             v.setBackgroundColor(Color.argb(
                                     255,
-                                    Math.round(R),
-                                    Math.round(G),
-                                    Math.round(B)));
+                                    R,
+                                    G,
+                                    B));
 
-                            mCaptureDataFloat[xSegment][ySegment][0] = A * 256;
-                            mCaptureDataFloat[xSegment][ySegment][1] = R * 256;
-                            mCaptureDataFloat[xSegment][ySegment][2] = G * 256;
-                            mCaptureDataFloat[xSegment][ySegment][3] = B * 256;
-
-                            putNewTemporalFrame();
+                            mCaptureDataDouble[xSegment][ySegment][0] = color[0];
+                            mCaptureDataDouble[xSegment][ySegment][1] = color[1];
+                            mCaptureDataDouble[xSegment][ySegment][2] = color[2];
+                            mCaptureDataDouble[xSegment][ySegment][3] = color[3];
                         }
 
                     }
@@ -483,42 +501,6 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
 
                 if (image != null) {
                     image.close();
-                }
-            }
-        }
-    }
-
-    private void putNewTemporalFrame()
-    {
-
-        for (int i = SMOOTHING_FRAMES - 1; i > 0; i--)
-        {
-//            Log.i(TAG, String.format("Assigning %d the value of %d, %f %f", i, i - 1, mCaptureDataTemporal[i][15][3][1], mCaptureDataTemporal[i - 1][15][3][1]));
-            for (int j = 0; j < CAPTURE_GRID_X_SEGMENTS; j++)
-            {
-
-                for (int k = 0; k < CAPTURE_GRID_Y_SEGMENTS; k++)
-                {
-
-                    for (int l = 0; l < PIXEL_SUBCHANNELS; l++)
-                    {
-                        mCaptureDataTemporal[i][j][k][l] = mCaptureDataTemporal[i - 1][j][k][l];
-
-                    }
-                }
-            }
-        }
-
-        for (int j = 0; j < CAPTURE_GRID_X_SEGMENTS; j++)
-        {
-
-            for (int k = 0; k < CAPTURE_GRID_Y_SEGMENTS; k++)
-            {
-
-                for (int l = 0; l < PIXEL_SUBCHANNELS; l++)
-                {
-                    mCaptureDataTemporal[0][j][k][l] = mCaptureDataFloat[j][k][l];
-
                 }
             }
         }
@@ -612,23 +594,11 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
         if (LOG_FPS)
         {
 
-//            Log.i(TAG, String.format("AVG Color (ARGB): [%f, %f, %f, %f]",
-//                    mCaptureDataFloat[0][0][0],
-//                    mCaptureDataFloat[0][0][1],
-//                    mCaptureDataFloat[0][0][2],
-//                    mCaptureDataFloat[0][0][3]));
-
-            Log.i(TAG, String.format("Temporal Color (r): [%f, %f, %f, %f, %f, %f, %f, %f, %f, %f]",
-                    mCaptureDataTemporal[0][0][0][1],
-                    mCaptureDataTemporal[1][0][0][1],
-                    mCaptureDataTemporal[2][0][0][1],
-                    mCaptureDataTemporal[3][0][0][1],
-                    mCaptureDataTemporal[4][0][0][1],
-                    mCaptureDataTemporal[5][0][0][1],
-                    mCaptureDataTemporal[6][0][0][1],
-                    mCaptureDataTemporal[7][0][0][1],
-                    mCaptureDataTemporal[8][0][0][1],
-                    mCaptureDataTemporal[9][0][0][1]));
+            Log.i(TAG, String.format("AVG Color (ARGB): [%f, %f, %f, %f]",
+                    mCaptureDataDouble[0][0][0],
+                    mCaptureDataDouble[0][0][1],
+                    mCaptureDataDouble[0][0][2],
+                    mCaptureDataDouble[0][0][3]));
 
             String fps = String.format("FPS: %d", screenFpsCounter);
             String outputFps = String.format("Serial fps: %d", outputFpsCounter);
@@ -653,86 +623,46 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
 
     }
 
-    private int[][][] getAverageColors()
-    {
-        int averageColors[][][] = new int[CAPTURE_GRID_X_SEGMENTS][CAPTURE_GRID_Y_SEGMENTS][PIXEL_SUBCHANNELS];
-        int totalWeight = 0;
-
-        for (int i = SMOOTHING_FRAMES; i >= 0; i--)
-        {
-            totalWeight += i;
-        }
-
-        for (int sf = 0; sf < SMOOTHING_FRAMES; sf++)
-        {
-            for (int cgx = 0; cgx < CAPTURE_GRID_X_SEGMENTS; cgx++)
-            {
-                for (int cgy = 0; cgy < CAPTURE_GRID_Y_SEGMENTS; cgy++)
-                {
-                    for (int sc = 0; sc < PIXEL_SUBCHANNELS; sc++)
-                    {
-                        // The most recent frame data has the highest weight
-                        int weight = SMOOTHING_FRAMES - sf;
-                        averageColors[cgx][cgy][sc] += mCaptureDataTemporal[sf][cgx][cgy][sc] * weight;
-                    }
-                }
-            }
-        }
-
-        for (int cgx = 0; cgx < CAPTURE_GRID_X_SEGMENTS; cgx++)
-        {
-            for (int cgy = 0; cgy < CAPTURE_GRID_Y_SEGMENTS; cgy++)
-            {
-                for (int sc = 0; sc < PIXEL_SUBCHANNELS; sc++)
-                {
-                    averageColors[cgx][cgy][sc] = averageColors[cgx][cgy][sc] / totalWeight;
-                }
-            }
-        }
-
-        return averageColors;
-    }
-
     private void outputSerial(UsbSerialDevice ser)
     {
-        int avg[][][] = getAverageColors();
-        int simplifiedAvg[][][] = new int[2][1][4];
-
-        for (int i = 0; i < CAPTURE_GRID_X_SEGMENTS; i++)
-        {
-            for (int j = 0; j < CAPTURE_GRID_Y_SEGMENTS; j++)
-            {
-                for (int k = 0; k < PIXEL_SUBCHANNELS; k++)
-                {
-                    int x = (i < 7) ? 0 : 1;
-                    simplifiedAvg[x][0][k] += (avg[i][j][k] / 72.0);
-                }
-            }
-        }
+        // The packet is built up as follows:
+        // [Header][x_segments][y_segments][data_length][data]
+        // Every segment holds a 16-bit RGB value, big endian in RGB sequence
+        // Example packet:
+        // Header[0xABABABAB] x_segments[0x10] y_segments[0x09] data_length[90] data[0xFF][0x80][0xFF][0x80][0xFF][0x80]...
 
         try
         {
-            byte bytes[] = new byte[1 + (2 * 3 * 2)];
-            bytes[0] = (byte)255;
+            byte bytes[] = new byte[4 + 2 + 1 + (CAPTURE_GRID_X_SEGMENTS * CAPTURE_GRID_Y_SEGMENTS * 3 * 2)];
+            bytes[0] = HEADER_0;
+            bytes[1] = HEADER_1;
+            bytes[2] = HEADER_2;
+            bytes[3] = HEADER_3;
+
+            bytes[CMD_FUNCTION] = FUNCTION_DATA;
+
+            bytes[CMD_DATA_LENGTH] = 0x03;
+            bytes[CMD_DATA_LENGTH + 1] = 0x60;
 
             int pos = 1;
 
-            for (int i = 0; i < 2; i++)
+            for (int y = 0; y < CAPTURE_GRID_Y_SEGMENTS; y++)
             {
-
-                for (int j = 0; j < 3; j++)
+                for (int x = 0; x < CAPTURE_GRID_X_SEGMENTS; x++)
                 {
-                    int captureGridElementX = i;
-                    int high = (int)Math.floor(simplifiedAvg[captureGridElementX][0][j + 1] / 256);
-                    int low = (int)(simplifiedAvg[captureGridElementX][0][j + 1] - (high * 256));
+                    int arrayPosition = ((CAPTURE_GRID_X_SEGMENTS * y) + x) * 3 * 2 + CMD_DATA;
 
-                    high = (high > 254) ? (byte)254 : high;
-                    low = (low > 254) ? (byte)254 : low;
+                    double color[] = mCaptureGrid[x][y].getTemporalAverageColor();
 
-                    bytes[pos] = (byte)high;
-                    bytes[pos + 1] = (byte)low;
+                    bytes[arrayPosition + 0] = (byte)((int)color[1] >> 8);
+                    bytes[arrayPosition + 1] = (byte)((int)color[1] & 0xff);
 
-                    pos += 2;
+                    bytes[arrayPosition + 2] = (byte)((int)color[2] >> 8);
+                    bytes[arrayPosition + 3] = (byte)((int)color[2] & 0xff);
+
+                    bytes[arrayPosition + 4] = (byte)((int)color[3] >> 8);
+                    bytes[arrayPosition + 5] = (byte)((int)color[3] & 0xff);
+
                 }
             }
 
