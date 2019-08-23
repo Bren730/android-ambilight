@@ -37,4 +37,7 @@
     <string name="error_fragment_message">An error occurred</string>
     <string name="dismiss_error">Dismiss</string>
     <string name="oops">Oops</string>
+
+    <string name="channel_name">Ambilight notification channel</string>
+    <string name="channel_description">Ambilight notification channel</string>
 </resources>

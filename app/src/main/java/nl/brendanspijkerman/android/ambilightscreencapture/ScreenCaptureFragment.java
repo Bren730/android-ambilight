@@ -3,8 +3,10 @@ package nl.brendanspijkerman.android.ambilightscreencapture;
 import android.app.Activity;
 import android.app.Fragment;
 import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
@@ -43,10 +45,13 @@ import com.felhr.usbserial.UsbSerialInterface;
 
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import nl.brendanspijkerman.android.ambilightscreencapture.model.GridElement;
 
@@ -92,6 +97,7 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
 
     private int mScreenDensity;
     private Handler mHandler;
+    ScheduledThreadPoolExecutor outputScheduler = new ScheduledThreadPoolExecutor(20);
 
     private int mResultCode;
     private Intent mResultData;
@@ -117,20 +123,73 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
         }
     };
 
-    private final Handler mSerialOutputHandler = new Handler();
+//    private final Handler mSerialOutputHandler = new Handler();
 
-    class SerialRunnable implements Runnable {
+//    class SerialRunnable implements Runnable {
+//
+//        UsbSerialDevice ser;
+//
+//        SerialRunnable(UsbSerialDevice ser)
+//        {
+//            this.ser = ser;
+//        }
+//
+//        public void run() {
+//            outputSerial(this.ser);
+//            mSerialOutputHandler.postDelayed(this, OUTPUT_MS);
+//        }
+//    };
+
+    private final Handler mCalculationHandler = new Handler();
+
+    class CalculationRunnable implements Runnable {
 
         UsbSerialDevice ser;
+        GridElement captureGrid[][];
+        long time;
 
-        SerialRunnable(UsbSerialDevice ser)
+        CalculationRunnable(UsbSerialDevice ser, GridElement[][] captureGrid)
         {
+            this.captureGrid = captureGrid;
             this.ser = ser;
         }
 
         public void run() {
-            outputSerial(this.ser);
-            mSerialOutputHandler.postDelayed(this, OUTPUT_MS);
+
+                long ms;
+
+                ms = System.currentTimeMillis() - this.time;
+//                Log.i(TAG, String.format("loop took %d ms", ms));
+
+                this.time = System.currentTimeMillis();
+                long time = System.currentTimeMillis();
+
+                for (int x = 0; x < CAPTURE_GRID_X_SEGMENTS; x++)
+                {
+                    for (int y = 0; y < CAPTURE_GRID_Y_SEGMENTS; y++)
+                    {
+                        this.captureGrid[x][y].addFrame(this.captureGrid[x][y].getTemporalAverageColor());
+
+
+                    }
+                }
+
+
+
+                ms = System.currentTimeMillis() - time;
+//            Log.i(TAG, String.format("Calculating average color took %d ms", ms));
+
+                time = System.currentTimeMillis();
+
+                serialWrite(this.ser);
+
+                ms = System.currentTimeMillis() - time;
+
+//            Log.i(TAG, String.format("Serial write took %d ms", ms));
+//            mCalculationHandler.postDelayed(this, 5);
+//                mCalculationHandler.post(this);
+//            mCalculationHandler.post(this);
+            mCalculationHandler.postDelayed(this, 0);
         }
     };
 
@@ -148,8 +207,9 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
     private static final int CAPTURE_GRID_X_SEGMENTS = 16;
     private static final int CAPTURE_GRID_Y_SEGMENTS = 9;
     private static final int CAPTURE_GRID_COUNT = CAPTURE_GRID_X_SEGMENTS * CAPTURE_GRID_Y_SEGMENTS;
-    private static final int SMOOTHING_FRAMES = 10;
+    private static final int SMOOTHING_FRAMES = 20;
     private static final int PIXEL_SUBCHANNELS = 4;
+    private boolean receivedNewFrame = false;
     // Grid X, Grid Y, rgb
     private double[][][] mCaptureDataDouble = new double[CAPTURE_GRID_X_SEGMENTS][CAPTURE_GRID_Y_SEGMENTS][PIXEL_SUBCHANNELS];
 
@@ -168,10 +228,11 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
     private static final String ACTION_USB_PERMISSION = "nl.brendanspijkerman.android.ambilightscreencapture.USB_PERMISSION";
 
     private UsbManager usbManager;
-    private UsbDevice device;
+    private UsbDevice particleDevice;
     private UsbDeviceConnection usbConnection;
     private UsbSerialDevice serial;
     private boolean hasUsbPermissions = false;
+    private boolean isWriting = false;
 
     @Override
     public void onAttach(Context context)
@@ -189,8 +250,38 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
             mResultData = savedInstanceState.getParcelable(STATE_RESULT_DATA);
         }
         initCaptureGrid();
+
         usbManager = (UsbManager) getActivity().getSystemService(Context.USB_SERVICE);
-        findSerialPortDevice();
+        scanSerialDevices();
+
+        BroadcastReceiver mUsbAttachReceiver = new BroadcastReceiver() {
+            public void onReceive(Context context, Intent intent) {
+                String action = intent.getAction();
+
+                if (UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(action)) {
+//                    showToast("New device connected");
+                    scanSerialDevices();
+                }
+            }
+        };
+
+        BroadcastReceiver mUsbDetachReceiver = new BroadcastReceiver() {
+            public void onReceive(Context context, Intent intent) {
+                String action = intent.getAction();
+
+                if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(action)) {
+                    UsbDevice device = (UsbDevice)intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                    if (device != null) {
+                        showToast(String.format("%s disconnected", device.getProductName()));
+                    }
+                }
+            }
+        };
+
+        IntentFilter filter = new IntentFilter(UsbManager.ACTION_USB_DEVICE_ATTACHED);
+        this.getContext().registerReceiver(mUsbAttachReceiver , filter);
+        filter = new IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED);
+        this.getContext().registerReceiver(mUsbDetachReceiver , filter);
 
     }
 
@@ -200,19 +291,25 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
         {
             for (int j = 0; j < CAPTURE_GRID_Y_SEGMENTS; j++)
             {
-                this.mCaptureGrid[i][j] = new GridElement(
-                        mCaptureGridElementResolution,
-                        mCaptureGridElementResolution,
-                        SMOOTHING_FRAMES,
-                        5);
+                this.mCaptureGrid[i][j] = new GridElement(SMOOTHING_FRAMES, 5);
             }
         }
     }
 
-    private void findSerialPortDevice() {
+    private void showToast(String message)
+    {
+        Context context = this.getContext();
+        int duration = Toast.LENGTH_LONG;
 
+        Toast toast = Toast.makeText(context, message, duration);
+        toast.show();
+    }
+
+    private void scanSerialDevices()
+    {
         HashMap<String, UsbDevice> usbDevices = usbManager.getDeviceList();
         if (!usbDevices.isEmpty()) {
+            UsbDevice device;
             boolean keep = true;
             for (Map.Entry<String, UsbDevice> entry : usbDevices.entrySet()) {
                 device = entry.getValue();
@@ -224,62 +321,108 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
                 if (device.getManufacturerName().equals("Particle"))
                 {
                     Log.i(TAG, "Found Particle device, trying to establish a connection");
-                    requestUserPermission();
+                    requestUSBPermission(device);
 
                     // TODO: properly implement USB permissions and callbacks
 
-                    hasUsbPermissions = true;
-                    usbConnection = usbManager.openDevice(device);
-                    serial = UsbSerialDevice.createUsbSerialDevice(device, usbConnection);
-                    if (serial != null) {
-                        if (serial.open()) { //Set Serial Connection Parameters.
-//                            setUiEnabled(true); //Enable Buttons in UI
-                            serial.setBaudRate(115200);
-                            serial.setDataBits(UsbSerialInterface.DATA_BITS_8);
-                            serial.setStopBits(UsbSerialInterface.STOP_BITS_1);
-                            serial.setParity(UsbSerialInterface.PARITY_NONE);
-                            serial.setFlowControl(UsbSerialInterface.FLOW_CONTROL_OFF);
-                            serial.read(mCallback); //
-
-                        } else {
-                            Log.d("SERIAL", "PORT NOT OPEN");
-                        }
-                    } else {
-                        Log.d("SERIAL", "PORT IS NULL");
-                    }
                 }
 
-                if (deviceVID != 0x1d6b && (devicePID != 0x0001 && devicePID != 0x0002 && devicePID != 0x0003) && deviceVID != 0x5c6 && devicePID != 0x904c) {
-
-                    // There is a device connected to our Android device. Try to open it as a Serial Port.
-                    requestUserPermission();
-                    keep = false;
-                } else {
-//                    connection = null;
-                    device = null;
-                }
-
-                if (!keep)
-                    break;
             }
-            if (!keep) {
-                // There is no USB devices connected (but usb host were listed). Send an intent to MainActivity.
-//                Intent intent = new Intent(ACTION_NO_USB);
-//                sendBroadcast(intent);
-            }
-        } else {
+
+        }
+        else
+        {
             // There is no USB devices connected. Send an intent to MainActivity
 //            Intent intent = new Intent(ACTION_NO_USB);
 //            sendBroadcast(intent);
             Log.e(TAG, "No USB devices connected");
+            showToast("no USB devices connected");
+        }
+    }
+
+    private void connectToSerialDevice(UsbDevice device)
+    {
+        hasUsbPermissions = true;
+        particleDevice = device;
+        usbConnection = usbManager.openDevice(particleDevice);
+        serial = UsbSerialDevice.createUsbSerialDevice(particleDevice, usbConnection);
+        if (serial != null) {
+            if (serial.open()) { //Set Serial Connection Parameters.
+//                            setUiEnabled(true); //Enable Buttons in UI
+                serial.setBaudRate(115200);
+                serial.setDataBits(UsbSerialInterface.DATA_BITS_8);
+                serial.setStopBits(UsbSerialInterface.STOP_BITS_1);
+                serial.setParity(UsbSerialInterface.PARITY_NONE);
+                serial.setFlowControl(UsbSerialInterface.FLOW_CONTROL_OFF);
+                serial.read(mCallback);
+
+//                SerialRunnable runnable = new SerialRunnable(serial);
+//                mSerialOutputHandler.post(runnable);
+
+//                CalculationRunnable runnable = new CalculationRunnable(serial, mCaptureGrid);
+//                mCalculationHandler.post(runnable);
+
+                new Timer().scheduleAtFixedRate(new TimerTask() {
+                    @Override
+                    public void run() {
+                        for (int x = 0; x < CAPTURE_GRID_X_SEGMENTS; x++)
+                        {
+                            for (int y = 0; y < CAPTURE_GRID_Y_SEGMENTS; y++)
+                            {
+                                mCaptureGrid[x][y].addFrame(mCaptureGrid[x][y].getTemporalAverageColor());
+
+
+                            }
+                        }
+
+                        serialWrite(serial);
+                    }
+                }, 0, 16);
+
+
+//                long period = 10; // the period between successive executions
+//                outputScheduler.scheduleAtFixedRate(runnable, 0, period, TimeUnit.MILLISECONDS);
+
+                showToast(String.format("Connected to %s", particleDevice.getProductName()));
+
+            } else {
+                Log.d("SERIAL", "PORT NOT OPEN");
+            }
+        }
+        else
+        {
+            Log.d("SERIAL", "PORT IS NULL");
         }
     }
 
     /*
      * Request user permission. The response will be received in the BroadcastReceiver
      */
-    private void requestUserPermission() {
+    private void requestUSBPermission(final UsbDevice device) {
         PendingIntent mPendingIntent = PendingIntent.getBroadcast(getActivity().getApplicationContext(), 0, new Intent(ACTION_USB_PERMISSION), 0);
+
+        BroadcastReceiver mUsbReceiver = new BroadcastReceiver() {
+            public void onReceive(Context context, Intent intent) {
+                String action = intent.getAction();
+
+                if (action.equals(ACTION_USB_PERMISSION)) {
+
+                    if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+                        showToast("Permission granted");
+                        connectToSerialDevice(device);
+                    }
+                    else
+                    {
+                        showToast("Permission denied");
+                    }
+//
+                }
+            }
+        };
+
+        IntentFilter filter = new IntentFilter(ACTION_USB_PERMISSION);
+        this.getContext().registerReceiver(mUsbReceiver, filter);
+
         usbManager.requestPermission(device, mPendingIntent);
     }
 
@@ -312,8 +455,6 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
         mAnimatedView.startAnimation(rotation);
 
         mFpsHandler.post(mUpdateFps);
-        SerialRunnable runnable = new SerialRunnable(serial);
-        mSerialOutputHandler.post(runnable);
 
         for (int i = 0; i < gridCount; i ++)
         {
@@ -401,7 +542,11 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
     @Override
     public void onDestroy() {
         super.onDestroy();
-//        tearDownMediaProjection();
+
+        showToast("Shutting down ambilight");
+
+        tearDownMediaProjection();
+        serial.close();
     }
 
     private class ImageAvailableListener implements ImageReader.OnImageAvailableListener {
@@ -413,6 +558,7 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
             try {
                 image = reader.acquireLatestImage();
                 if (image != null) {
+                    receivedNewFrame = true;
                     Image.Plane[] planes = image.getPlanes();
                     ByteBuffer buffer = planes[0].getBuffer();
                     int pixelStride = planes[0].getPixelStride();
@@ -452,23 +598,26 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
                                     mCaptureGridElementResolution
                             );
 
-                            mCaptureGrid[xSegment][ySegment].setPixels(px);
-                            double[] color;
-                            color = mCaptureGrid[xSegment][ySegment].getTemporalAverageColor();
+                            double[] color = new double[4];
 
-                            Log.i(TAG, "Pre-division");
-                            Log.i(TAG, Arrays.toString(color) );
+                            for (int i = 0; i < px.length; i++)
+                            {
+                                color[0] += (px[i] >> 24) & 0xff;
+                                color[1] += (px[i] >> 16) & 0xff;
+                                color[2] += (px[i] >>  8) & 0xff;
+                                color[3] += (px[i]      ) & 0xff;
+                            }
+
+                            mCaptureGrid[xSegment][ySegment].addFrame(color);
 
                             int R, G, B;
 
-                            R = (int)Math.round(color[1] / 256);
-                            G = (int)Math.round(color[2] / 256);
-                            B = (int)Math.round(color[3] / 256);
+                            R = (int)Math.round(mCaptureGrid[xSegment][ySegment].getTemporalAverageColor()[1] / 256);
+                            G = (int)Math.round(mCaptureGrid[xSegment][ySegment].getTemporalAverageColor()[2] / 256);
+                            B = (int)Math.round(mCaptureGrid[xSegment][ySegment].getTemporalAverageColor()[3] / 256);
 
-
-
-                            Log.i(TAG, "Post-division");
-                            Log.i(TAG, Arrays.toString(color) );
+//                            Log.i(TAG, "Post-division");
+//                            Log.i(TAG, Arrays.toString(color) );
 
                             View v = mGridLayout.getChildAt(absolutePosition);
                             v.setBackgroundColor(Color.argb(
@@ -489,6 +638,8 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
 
                     IMAGES_PRODUCED++;
                     screenFpsCounter++;
+
+                    receivedNewFrame = false;
                 }
 
             } catch (Exception e) {
@@ -594,11 +745,11 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
         if (LOG_FPS)
         {
 
-            Log.i(TAG, String.format("AVG Color (ARGB): [%f, %f, %f, %f]",
-                    mCaptureDataDouble[0][0][0],
-                    mCaptureDataDouble[0][0][1],
-                    mCaptureDataDouble[0][0][2],
-                    mCaptureDataDouble[0][0][3]));
+//            Log.i(TAG, String.format("AVG Color (ARGB): [%f, %f, %f, %f]",
+//                    mCaptureDataDouble[0][0][0],
+//                    mCaptureDataDouble[0][0][1],
+//                    mCaptureDataDouble[0][0][2],
+//                    mCaptureDataDouble[0][0][3]));
 
             String fps = String.format("FPS: %d", screenFpsCounter);
             String outputFps = String.format("Serial fps: %d", outputFpsCounter);
@@ -623,8 +774,65 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
 
     }
 
-    private void outputSerial(UsbSerialDevice ser)
+//    private void outputSerial(UsbSerialDevice ser)
+//    {
+//        // The packet is built up as follows:
+//        // [Header][x_segments][y_segments][data_length][data]
+//        // Every segment holds a 16-bit RGB value, big endian in RGB sequence
+//        // Example packet:
+//        // Header[0xABABABAB] x_segments[0x10] y_segments[0x09] data_length[90] data[0xFF][0x80][0xFF][0x80][0xFF][0x80]...
+//
+//        try
+//        {
+//            byte bytes[] = new byte[4 + 2 + 1 + (CAPTURE_GRID_X_SEGMENTS * CAPTURE_GRID_Y_SEGMENTS * 3 * 2)];
+//            bytes[0] = HEADER_0;
+//            bytes[1] = HEADER_1;
+//            bytes[2] = HEADER_2;
+//            bytes[3] = HEADER_3;
+//
+//            bytes[CMD_FUNCTION] = FUNCTION_DATA;
+//
+//            bytes[CMD_DATA_LENGTH] = 0x03;
+//            bytes[CMD_DATA_LENGTH + 1] = 0x60;
+//
+//            int pos = 1;
+//
+//            for (int y = 0; y < CAPTURE_GRID_Y_SEGMENTS; y++)
+//            {
+//                for (int x = 0; x < CAPTURE_GRID_X_SEGMENTS; x++)
+//                {
+//                    int arrayPosition = ((CAPTURE_GRID_X_SEGMENTS * y) + x) * 3 * 2 + CMD_DATA;
+//
+//                    double color[] = mCaptureGrid[x][y].getTemporalAverageColor();
+//
+//                    bytes[arrayPosition + 0] = (byte)((int)color[1] >> 8);
+//                    bytes[arrayPosition + 1] = (byte)((int)color[1] & 0xff);
+//
+//                    bytes[arrayPosition + 2] = (byte)((int)color[2] >> 8);
+//                    bytes[arrayPosition + 3] = (byte)((int)color[2] & 0xff);
+//
+//                    bytes[arrayPosition + 4] = (byte)((int)color[3] >> 8);
+//                    bytes[arrayPosition + 5] = (byte)((int)color[3] & 0xff);
+//
+//                }
+//            }
+//
+//            if (ser != null)
+//            {
+//                ser.write(bytes);
+//                outputFpsCounter++;
+//            }
+//
+//        }
+//        catch (Exception e)
+//        {
+//            Log.e(TAG, e.toString());
+//        }
+//    }
+
+    private void serialWrite(UsbSerialDevice ser)
     {
+//        Log.i(TAG, "Writing to serial");
         // The packet is built up as follows:
         // [Header][x_segments][y_segments][data_length][data]
         // Every segment holds a 16-bit RGB value, big endian in RGB sequence
@@ -633,6 +841,7 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
 
         try
         {
+            isWriting = true;
             byte bytes[] = new byte[4 + 2 + 1 + (CAPTURE_GRID_X_SEGMENTS * CAPTURE_GRID_Y_SEGMENTS * 3 * 2)];
             bytes[0] = HEADER_0;
             bytes[1] = HEADER_1;
@@ -672,10 +881,13 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
                 outputFpsCounter++;
             }
 
+            isWriting = false;
+
         }
         catch (Exception e)
         {
             Log.e(TAG, e.toString());
+            isWriting = false;
         }
     }
 
@@ -697,6 +909,7 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        showToast(String.format("%d", requestCode));
         switch (requestCode) {
             case 200:
                 break;
