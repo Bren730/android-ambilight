@@ -48,8 +48,6 @@ public class GridElement {
         double frameWeight = 1; // TODO adjust to temporalWeightExponent
         double sumFrameWeights = 0;
 
-        // (x+1)^-a
-
         for (int i = 0; i < this.temporalFrameCount; i++)
         {
             double normalized = (double)i / (double)this.temporalFrameCount;

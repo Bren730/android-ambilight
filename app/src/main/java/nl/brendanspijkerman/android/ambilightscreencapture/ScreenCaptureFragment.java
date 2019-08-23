@@ -94,6 +94,7 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
     private static int IMAGES_PRODUCED;
     private int screenFpsCounter = 0;
     private int outputFpsCounter = 0;
+    private long lastSerialWrite = 0;
 
     private int mScreenDensity;
     private Handler mHandler;
@@ -349,7 +350,7 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
         if (serial != null) {
             if (serial.open()) { //Set Serial Connection Parameters.
 //                            setUiEnabled(true); //Enable Buttons in UI
-                serial.setBaudRate(115200);
+                serial.setBaudRate(1000000);
                 serial.setDataBits(UsbSerialInterface.DATA_BITS_8);
                 serial.setStopBits(UsbSerialInterface.STOP_BITS_1);
                 serial.setParity(UsbSerialInterface.PARITY_NONE);
@@ -365,6 +366,13 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
                 new Timer().scheduleAtFixedRate(new TimerTask() {
                     @Override
                     public void run() {
+
+
+                        while(isWriting)
+                        {
+
+                        }
+
                         for (int x = 0; x < CAPTURE_GRID_X_SEGMENTS; x++)
                         {
                             for (int y = 0; y < CAPTURE_GRID_Y_SEGMENTS; y++)
@@ -376,8 +384,15 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
                         }
 
                         serialWrite(serial);
+
+//                        try {
+//                            Thread.sleep(2);
+//                        } catch (InterruptedException e) {
+//                            e.printStackTrace();
+//                        }
+
                     }
-                }, 0, 16);
+                }, 0, 1);
 
 
 //                long period = 10; // the period between successive executions
@@ -855,6 +870,7 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
 
             int pos = 1;
 
+            double average[] = {0, 0, 0, 0};
             for (int y = 0; y < CAPTURE_GRID_Y_SEGMENTS; y++)
             {
                 for (int x = 0; x < CAPTURE_GRID_X_SEGMENTS; x++)
@@ -862,6 +878,21 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
                     int arrayPosition = ((CAPTURE_GRID_X_SEGMENTS * y) + x) * 3 * 2 + CMD_DATA;
 
                     double color[] = mCaptureGrid[x][y].getTemporalAverageColor();
+
+                    average[0] += color[0];
+                    average[1] += color[1];
+                    average[2] += color[2];
+                    average[3] += color[3];
+
+//                    if (color[1] < 1000)
+//                    {
+//                        Log.e(TAG, String.format("Low: %f", color[1]));
+//                    }
+//
+//                    if (color[1] > 40000)
+//                    {
+//                        Log.e(TAG, String.format("High: %f, %d, %d", color[1], x, y));
+//                    }
 
                     bytes[arrayPosition + 0] = (byte)((int)color[1] >> 8);
                     bytes[arrayPosition + 1] = (byte)((int)color[1] & 0xff);
@@ -875,13 +906,22 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
                 }
             }
 
+            average[0] = average[0] / (CAPTURE_GRID_X_SEGMENTS * CAPTURE_GRID_Y_SEGMENTS);
+            average[1] = average[1] / (CAPTURE_GRID_X_SEGMENTS * CAPTURE_GRID_Y_SEGMENTS);
+            average[2] = average[2] / (CAPTURE_GRID_X_SEGMENTS * CAPTURE_GRID_Y_SEGMENTS);
+            average[3] = average[3] / (CAPTURE_GRID_X_SEGMENTS * CAPTURE_GRID_Y_SEGMENTS);
+
+//            Log.i(TAG, String.format("avg: %d, %d, %d", (int)average[1], (int)average[2], (int)average[3]));
+
             if (ser != null)
             {
+                long time = System.currentTimeMillis();
+//                Log.i(TAG, String.format("Start Writing %d", time));
                 ser.write(bytes);
                 outputFpsCounter++;
-            }
 
-            isWriting = false;
+                Log.i(TAG, String.format("Done Writing %d, took %d, last frame %d", time, System.currentTimeMillis() - time, System.currentTimeMillis() - lastSerialWrite));
+            }
 
         }
         catch (Exception e)
@@ -889,6 +929,8 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
             Log.e(TAG, e.toString());
             isWriting = false;
         }
+
+        lastSerialWrite = System.currentTimeMillis();
     }
 
     UsbSerialInterface.UsbReadCallback mCallback = new UsbSerialInterface.UsbReadCallback() {
@@ -896,12 +938,14 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
         @Override
         public void onReceivedData(byte[] arg0) {
             String data = null;
-            try {
-                data = new String(arg0, "UTF-8");
-                data.concat("/n");
-//                tvAppend(textView, data);
-            } catch (UnsupportedEncodingException e) {
-                e.printStackTrace();
+
+            if (arg0[0] == -1)
+            {
+                isWriting = false;
+            }
+            else
+            {
+                isWriting = false;
             }
         }
     };
