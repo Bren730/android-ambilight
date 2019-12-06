@@ -27,11 +27,13 @@ import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.Display;
 import android.view.LayoutInflater;
 import android.view.Surface;
 import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 import android.widget.Button;
@@ -43,7 +45,6 @@ import android.widget.Toast;
 import com.felhr.usbserial.UsbSerialDevice;
 import com.felhr.usbserial.UsbSerialInterface;
 
-import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
@@ -51,7 +52,6 @@ import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 
 import nl.brendanspijkerman.android.ambilightscreencapture.model.GridElement;
 
@@ -182,7 +182,7 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
 
                 time = System.currentTimeMillis();
 
-                serialWrite(this.ser);
+                serialWriteAmbilightData(this.ser);
 
                 ms = System.currentTimeMillis() - time;
 
@@ -208,7 +208,7 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
     private static final int CAPTURE_GRID_X_SEGMENTS = 16;
     private static final int CAPTURE_GRID_Y_SEGMENTS = 9;
     private static final int CAPTURE_GRID_COUNT = CAPTURE_GRID_X_SEGMENTS * CAPTURE_GRID_Y_SEGMENTS;
-    private static final int SMOOTHING_FRAMES = 20;
+    private static final int SMOOTHING_FRAMES = 40;
     private static final int PIXEL_SUBCHANNELS = 4;
     private boolean receivedNewFrame = false;
     // Grid X, Grid Y, rgb
@@ -279,10 +279,34 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
             }
         };
 
-        IntentFilter filter = new IntentFilter(UsbManager.ACTION_USB_DEVICE_ATTACHED);
-        this.getContext().registerReceiver(mUsbAttachReceiver , filter);
-        filter = new IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED);
-        this.getContext().registerReceiver(mUsbDetachReceiver , filter);
+        BroadcastReceiver mScreenPowerStateReceiver = new BroadcastReceiver() {
+            public void onReceive(Context context, Intent intent) {
+                String action = intent.getAction();
+
+                if (action.equals(Intent.ACTION_SCREEN_ON))
+                {
+                    Log.e(TAG, "Screen on");
+                    serialWriteAmbilightStart(serial);
+                }
+
+                if (action.equals(Intent.ACTION_SCREEN_OFF))
+                {
+                    Log.e(TAG, "Screen off");
+                    serialWriteAmbilightStop(serial);
+                }
+            }
+        };
+
+        IntentFilter usbAttachedFilter = new IntentFilter(UsbManager.ACTION_USB_DEVICE_ATTACHED);
+        this.getContext().registerReceiver(mUsbAttachReceiver , usbAttachedFilter);
+
+        IntentFilter usbDetachedFilter = new IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED);
+        this.getContext().registerReceiver(mUsbDetachReceiver , usbDetachedFilter);
+
+        IntentFilter screenPowerStateReceiverFilter = new IntentFilter();
+        screenPowerStateReceiverFilter.addAction(Intent.ACTION_SCREEN_ON);
+        screenPowerStateReceiverFilter.addAction(Intent.ACTION_SCREEN_OFF);
+        this.getContext().registerReceiver(mScreenPowerStateReceiver , screenPowerStateReceiverFilter);
 
     }
 
@@ -319,7 +343,7 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
 
                 Log.i(TAG, String.format("Vendor ID: %d, Product ID: %d", deviceVID, devicePID));
 
-                if (device.getManufacturerName().equals("Particle"))
+                if (device.getManufacturerName().equals("Particle") || device.getManufacturerName().equals("Teensyduino"))
                 {
                     Log.i(TAG, "Found Particle device, trying to establish a connection");
                     requestUSBPermission(device);
@@ -383,7 +407,7 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
                             }
                         }
 
-                        serialWrite(serial);
+                        serialWriteAmbilightData(serial);
 
 //                        try {
 //                            Thread.sleep(2);
@@ -551,17 +575,74 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
     @Override
     public void onPause() {
         super.onPause();
+        Log.e(TAG, "App paused");
 //        stopScreenCapture();
+
+        printDisplayState();
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        Log.e(TAG, "App stopped");
+
+        printDisplayState();
+    }
+
+    private void printDisplayState()
+    {
+        Display mainDisplay = getActivity().getWindowManager().getDefaultDisplay();
+        int state = mainDisplay.getState();
+
+        WindowManager manager = getActivity().getWindowManager();
+
+
+
+        String stateString = "";
+
+        switch(state)
+        {
+            case Display.STATE_DOZE:
+                stateString = "STATE_DOZE";
+                break;
+
+            case Display.STATE_DOZE_SUSPEND:
+                stateString = "STATE_DOZE_SUSPEND";
+                break;
+
+            case Display.STATE_OFF:
+                stateString = "STATE_OFF";
+                break;
+
+            case Display.STATE_ON:
+                stateString = "STATE_ON";
+                break;
+
+            case Display.STATE_UNKNOWN:
+                stateString = "STATE_UNKNOWN";
+                break;
+
+            case Display.STATE_VR:
+                stateString = "STATE_VR";
+                break;
+        }
+
+        Log.e(TAG, String.format("Display state %s (%d)", stateString, mainDisplay.getState()));
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
+        Log.e(TAG, "App destroyed");
 
         showToast("Shutting down ambilight");
 
         tearDownMediaProjection();
         serial.close();
+
+        Display mainDisplay = getActivity().getWindowManager().getDefaultDisplay();
+        mainDisplay.getState();
+        Log.e(TAG, String.format("Display state %d", mainDisplay.getState()));
     }
 
     private class ImageAvailableListener implements ImageReader.OnImageAvailableListener {
@@ -845,7 +926,7 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
 //        }
 //    }
 
-    private void serialWrite(UsbSerialDevice ser)
+    private void serialWriteAmbilightData(UsbSerialDevice ser)
     {
 //        Log.i(TAG, "Writing to serial");
         // The packet is built up as follows:
@@ -920,7 +1001,7 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
                 ser.write(bytes);
                 outputFpsCounter++;
 
-                Log.i(TAG, String.format("Done Writing %d, took %d, last frame %d", time, System.currentTimeMillis() - time, System.currentTimeMillis() - lastSerialWrite));
+//                Log.i(TAG, String.format("Done Writing %d, took %d, last frame %d", time, System.currentTimeMillis() - time, System.currentTimeMillis() - lastSerialWrite));
             }
 
         }
@@ -933,19 +1014,64 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
         lastSerialWrite = System.currentTimeMillis();
     }
 
+    private void serialWriteAmbilightStop(UsbSerialDevice ser)
+    {
+        Log.i(TAG, "Sending stop packet");
+
+        byte bytes[] = new byte[4 + 2 + 1];
+        bytes[0] = HEADER_0;
+        bytes[1] = HEADER_1;
+        bytes[2] = HEADER_2;
+        bytes[3] = HEADER_3;
+
+        bytes[CMD_FUNCTION] = FUNCTION_STOP;
+
+        bytes[CMD_DATA_LENGTH] = 0x00;
+        bytes[CMD_DATA_LENGTH + 1] = 0x00;
+
+        if (ser != null)
+        {
+            ser.write(bytes);
+        }
+    }
+
+    private void serialWriteAmbilightStart(UsbSerialDevice ser)
+    {
+        Log.i(TAG, "Sending start packet");
+
+        byte bytes[] = new byte[4 + 2 + 1];
+        bytes[0] = HEADER_0;
+        bytes[1] = HEADER_1;
+        bytes[2] = HEADER_2;
+        bytes[3] = HEADER_3;
+
+        bytes[CMD_FUNCTION] = FUNCTION_START;
+
+        bytes[CMD_DATA_LENGTH] = 0x00;
+        bytes[CMD_DATA_LENGTH + 1] = 0x00;
+
+        if (ser != null)
+        {
+            ser.write(bytes);
+        }
+    }
+
     UsbSerialInterface.UsbReadCallback mCallback = new UsbSerialInterface.UsbReadCallback() {
         //Defining a Callback which triggers whenever data is read.
         @Override
         public void onReceivedData(byte[] arg0) {
             String data = null;
 
-            if (arg0[0] == -1)
+            if (arg0 != null)
             {
-                isWriting = false;
-            }
-            else
-            {
-                isWriting = false;
+                if (arg0[0] == -1)
+                {
+                    isWriting = false;
+                }
+                else
+                {
+                    isWriting = false;
+                }
             }
         }
     };
