@@ -13,14 +13,18 @@ Transition::Transition(uint16_t _transitionTime)
 
 void Transition::start()
 {
-	startTime = millis();
-	progress = 0;
-	running = true;
+	if (!running)
+	{
+		startTime = millis();
+		progress = 0;
+		running = true;
+	}
 }
 
 void Transition::reset()
 {
-
+	running = false;
+	start();
 }
 
 void Transition::stop()

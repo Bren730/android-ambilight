@@ -143,57 +143,6 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
 
     private final Handler mCalculationHandler = new Handler();
 
-    class CalculationRunnable implements Runnable {
-
-        UsbSerialDevice ser;
-        GridElement captureGrid[][];
-        long time;
-
-        CalculationRunnable(UsbSerialDevice ser, GridElement[][] captureGrid)
-        {
-            this.captureGrid = captureGrid;
-            this.ser = ser;
-        }
-
-        public void run() {
-
-                long ms;
-
-                ms = System.currentTimeMillis() - this.time;
-//                Log.i(TAG, String.format("loop took %d ms", ms));
-
-                this.time = System.currentTimeMillis();
-                long time = System.currentTimeMillis();
-
-                for (int x = 0; x < CAPTURE_GRID_X_SEGMENTS; x++)
-                {
-                    for (int y = 0; y < CAPTURE_GRID_Y_SEGMENTS; y++)
-                    {
-                        this.captureGrid[x][y].addFrame(this.captureGrid[x][y].getTemporalAverageColor());
-
-
-                    }
-                }
-
-
-
-                ms = System.currentTimeMillis() - time;
-//            Log.i(TAG, String.format("Calculating average color took %d ms", ms));
-
-                time = System.currentTimeMillis();
-
-                serialWriteAmbilightData(this.ser);
-
-                ms = System.currentTimeMillis() - time;
-
-//            Log.i(TAG, String.format("Serial write took %d ms", ms));
-//            mCalculationHandler.postDelayed(this, 5);
-//                mCalculationHandler.post(this);
-//            mCalculationHandler.post(this);
-            mCalculationHandler.postDelayed(this, 0);
-        }
-    };
-
     // Output bit depth
     private int mOutputBitDepth = 16;
     private static final int OUTPUT_FPS = 100;
@@ -545,8 +494,10 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
             case R.id.toggle:
                 if (mVirtualDisplay == null) {
                     startScreenCapture();
+                    serialWriteAmbilightStart(serial);
                 } else {
                     stopScreenCapture();
+                    serialWriteAmbilightStop(serial);
                 }
                 break;
         }
@@ -585,7 +536,7 @@ public class ScreenCaptureFragment extends Fragment implements View.OnClickListe
     public void onStop() {
         super.onStop();
         Log.e(TAG, "App stopped");
-
+//        serialWriteAmbilightStop(serial);
         printDisplayState();
     }
 

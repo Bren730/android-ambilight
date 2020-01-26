@@ -6,14 +6,24 @@ Parser::Parser()
 	
 }
 
-void Parser::addEventListener(void (*listener) ())
-{
-  eventListener = listener;
-}
-
 void Parser::onAmbilightPacketReceived(void (*listener) ())
 {
   onAmbilightPacketReceivedListener = listener;
+}
+
+void Parser::onStartPacketReceived(void (*listener) ())
+{
+  onStartPacketReceivedListener = listener;
+}
+
+void Parser::onPausePacketReceived(void (*listener) ())
+{
+  onPausePacketReceivedListener = listener;
+}
+
+void Parser::onStopPacketReceived(void (*listener) ())
+{
+  onStopPacketReceivedListener = listener;
 }
 
 void Parser::parseByte(uint8_t b)
@@ -129,27 +139,25 @@ void Parser::parseByte(uint8_t b)
 
       if (receiveBuffer[CMD_FUNCTION] == FUNCTION_START)
       {
-        // Serial.println("FUNCTION_START");
-        // setLED(0, 0, 65535, 0);
-        // setLED(1, 0, 65535, 0);
-        // setLED(2, 0, 65535, 0);
-        // setLED(3, 0, 65535, 0);
-        // tlc.write();
-        //            isAmbilightOn = true;
-      }
+        next_byte = RECV_HEADER_0;
+        received_length = 0;
+        received_data_length = 0;
 
-      if (receiveBuffer[CMD_FUNCTION] == FUNCTION_STOP)
+        onStartPacketReceivedListener();
+      }
+      else if (receiveBuffer[CMD_FUNCTION] == FUNCTION_STOP)
       {
-        // Serial.println("FUNCTION_START");
-        // setLED(0, 65535, 0, 0);
-        // setLED(1, 65535, 0, 0);
-        // setLED(2, 65535, 0, 0);
-        // setLED(3, 65535, 0, 0);
-        // tlc.write();
-        //            isAmbilightOn = false;
+        next_byte = RECV_HEADER_0;
+        received_length = 0;
+        received_data_length = 0;
+        
+        onStopPacketReceivedListener();
       }
-
-      next_byte = RECV_DATA;
+      else
+      {
+        next_byte = RECV_DATA;
+      }
+      
       break;
 
 
@@ -168,20 +176,22 @@ void Parser::parseByte(uint8_t b)
           case FUNCTION_START:
             // Serial.println("FUNCTION_START");
             //                 isAmbilightOn = true;
+            onStartPacketReceivedListener();
             break;
 
           case FUNCTION_DATA:
             // Serial.println("FUNCTION_AMBILIGHT");
             processAmbilightData(receiveBuffer, sizeof(receiveBuffer));
+            onAmbilightPacketReceivedListener();
 
             break;
 
           case FUNCTION_PAUSE:
-            // Serial.println("FUNCTION_PAUSE");
+            onPausePacketReceivedListener();
             break;
 
           case FUNCTION_STOP:
-          
+            onStopPacketReceivedListener();
             break;
         }
 

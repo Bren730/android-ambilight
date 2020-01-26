@@ -56,8 +56,11 @@ class Parser {
 
 		void parseByte(uint8_t b);
 		void processAmbilightData(uint8_t _colorData[], uint16_t length);
-		void addEventListener(void (*listener) ());
+
 		void onAmbilightPacketReceived(void (*listener) ());
+		void onStartPacketReceived(void (*listener) ());
+		void onPausePacketReceived(void (*listener) ());
+		void onStopPacketReceived(void (*listener) ());
 
 	private:
 		uint8_t next_byte = RECV_HEADER_0;
@@ -66,8 +69,10 @@ class Parser {
 		uint16_t received_data_length = 0;
 
 		// Event listeners
-		void (*eventListener) ();
 		void (*onAmbilightPacketReceivedListener) ();
+		void (*onStartPacketReceivedListener) ();
+		void (*onPausePacketReceivedListener) ();
+		void (*onStopPacketReceivedListener) ();
 };
 
 #endif
